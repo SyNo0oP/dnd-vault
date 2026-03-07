@@ -19,9 +19,11 @@ export default function Home() {
           <div className="text-4xl mb-4">👤</div>
           <h2 className="text-2xl font-bold text-amber-500 mb-2">Forger un Héros</h2>
           <p className="text-slate-400 text-sm mb-6">Utilisez notre éditeur guidé pour créer une fiche complète en quelques minutes.</p>
-          <button className="w-full py-3 bg-amber-600 rounded-xl font-bold group-hover:bg-amber-500 transition-colors">
+          <Link href="/characters">
+            <button className="w-full py-3 bg-amber-600 rounded-xl font-bold group-hover:bg-amber-500 transition-colors">
             Commencer la création
-          </button>
+            </button>
+          </Link>
         </div>
 
         {/* CARTE : CRÉER UNE PARTIE */}
