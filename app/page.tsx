@@ -1,69 +1,74 @@
-'use client'; // Obligatoire pour rendre la page interactive (boutons, formulaires)
+'use client';
 import { useState } from 'react';
 
 export default function Home() {
-  // --- NOS VARIABLES MAGIQUES (Le State) ---
-  const [name, setName] = useState("Aventurier Anonyme");
+  const [name, setName] = useState("Aventurier");
   const [hp, setHp] = useState(20);
-  const [level, setLevel] = useState(1);
+  
+  // On crée un objet pour stocker toutes nos stats d'un coup
+  const [stats, setStats] = useState({
+    Force: 10,
+    Dextérité: 10,
+    Constitution: 10,
+    Intelligence: 10,
+    Sagesse: 10,
+    Charisme: 10
+  });
+
+  const rollD20 = (statName: string, value: number) => {
+    const result = Math.floor(Math.random() * 20) + 1;
+    const bonus = Math.floor((value - 10) / 2); // Calcul du modificateur D&D
+    alert(`Jet de ${statName} : ${result} (Dé) + ${bonus} (Mod) = ${result + bonus}`);
+  };
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100 p-8 font-serif">
-      <div className="max-w-2xl mx-auto border-2 border-amber-900 bg-slate-900 p-8 rounded-lg shadow-2xl">
+    <main className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8 font-serif">
+      <div className="max-w-4xl mx-auto border-2 border-amber-900 bg-slate-900 p-6 rounded-lg shadow-2xl">
         
-        {/* TITRE & NOM */}
-        <header className="text-center mb-10 border-b border-amber-800 pb-6">
-          <h1 className="text-4xl font-bold text-amber-500 uppercase tracking-widest mb-4">
-            Feuille de Personnage
-          </h1>
+        {/* EN-TÊTE RE-STYLYSÉ */}
+        <header className="flex flex-col md:flex-row justify-between items-center mb-8 border-b border-amber-800 pb-6 gap-4">
           <input 
             type="text" 
             placeholder="Nom du héros..."
             onChange={(e) => setName(e.target.value)}
-            className="bg-transparent text-2xl text-center border-b border-slate-700 focus:border-amber-500 outline-none w-full italic text-amber-200"
+            className="bg-slate-800 text-2xl border-2 border-amber-900/50 rounded px-4 py-2 focus:border-amber-500 outline-none w-full md:w-auto italic text-amber-200"
           />
+          <div className="flex items-center gap-4 bg-red-950/30 p-3 rounded-lg border border-red-900">
+            <span className="font-bold text-red-500">PV: {hp}</span>
+            <button onClick={() => setHp(hp - 1)} className="bg-red-900 px-2 rounded">-</button>
+            <button onClick={() => setHp(hp + 1)} className="bg-green-900 px-2 rounded">+</button>
+          </div>
         </header>
 
-        {/* INFOS RAPIDES (HP & NIVEAU) */}
-        <div className="grid grid-cols-2 gap-8 mb-10">
-          
-          {/* SECTION POINTS DE VIE */}
-          <div className="flex flex-col items-center p-4 bg-slate-800 rounded-md border border-red-900">
-            <span className="text-red-500 font-bold uppercase text-xs mb-2 text-center">Points de Vie</span>
-            <div className="text-4xl font-bold mb-4">{hp}</div>
-            <div className="flex gap-2">
-              <button 
-                onClick={() => setHp(hp - 1)}
-                className="px-3 py-1 bg-red-900 hover:bg-red-700 rounded transition-colors"
-              >
-                -1
-              </button>
-              <button 
-                onClick={() => setHp(hp + 1)}
-                className="px-3 py-1 bg-green-900 hover:bg-green-700 rounded transition-colors"
-              >
-                +1
-              </button>
+        {/* GRILLE DES STATISTIQUES */}
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          {Object.entries(stats).map(([key, value]) => (
+            <div key={key} className="bg-slate-800 p-4 rounded border border-slate-700 hover:border-amber-600 transition-all group">
+              <label className="block text-amber-500 font-bold text-sm uppercase mb-2">{key}</label>
+              <div className="flex items-center justify-between gap-2">
+                <input 
+                  type="number" 
+                  value={value}
+                  onChange={(e) => setStats({...stats, [key]: parseInt(e.target.value) || 0})}
+                  className="w-16 bg-slate-900 border border-slate-600 rounded p-1 text-center text-xl font-bold"
+                />
+                <button 
+                  onClick={() => rollD20(key, value)}
+                  className="bg-amber-700 hover:bg-amber-600 text-xs p-2 rounded-full transform active:scale-90 transition-transform"
+                  title="Lancer le dé"
+                >
+                  🎲
+                </button>
+              </div>
+              <div className="text-[10px] text-slate-500 mt-2 italic text-center">
+                Modificateur: {Math.floor((value - 10) / 2) >= 0 ? '+' : ''}{Math.floor((value - 10) / 2)}
+              </div>
             </div>
-          </div>
-
-          {/* SECTION NIVEAU */}
-          <div className="flex flex-col items-center p-4 bg-slate-800 rounded-md border border-amber-900">
-            <span className="text-amber-500 font-bold uppercase text-xs mb-2 text-center">Niveau</span>
-            <div className="text-4xl font-bold mb-4">{level}</div>
-            <button 
-              onClick={() => setLevel(level + 1)}
-              className="px-6 py-1 bg-amber-700 hover:bg-amber-600 rounded font-bold transition-all uppercase text-xs"
-            >
-              Level Up !
-            </button>
-          </div>
-
+          ))}
         </div>
 
-        {/* RÉSUMÉ */}
-        <footer className="mt-8 pt-6 border-t border-slate-800 text-center text-slate-400">
-          <p>L'illustre <span className="text-amber-400 font-bold">{name}</span> est prêt pour l'aventure.</p>
+        <footer className="mt-8 text-center text-slate-500 text-sm italic">
+          Propulsé par la magie de Next.js pour {name}
         </footer>
       </div>
     </main>
