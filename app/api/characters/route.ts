@@ -22,14 +22,13 @@ export async function GET(request: Request) {
   }
 }
 
-// 📤 SAUVEGARDER (POST)
+// 📤 CRÉER (POST)
 export async function POST(request: Request) {
   try {
     const client = await clientPromise;
     const db = client.db("dndvault");
     const body = await request.json();
     
-    // On s'assure que les stats existent pour éviter les crashs
     const character = await db.collection("characters").insertOne({ 
       ...body, 
       createdAt: new Date() 
@@ -41,27 +40,45 @@ export async function POST(request: Request) {
   }
 }
 
+// 🆙 MODIFIER (PUT)
+export async function PUT(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get("id");
+
+    if (!id) return NextResponse.json({ error: "ID manquant" }, { status: 400 });
+
+    const client = await clientPromise;
+    const db = client.db("dndvault");
+    const body = await request.json();
+
+    // On retire le _id pour éviter l'erreur d'immuabilité de MongoDB
+    const { _id, ...updateData } = body;
+
+    const result = await db.collection("characters").updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { ...updateData, updatedAt: new Date() } }
+    );
+
+    return NextResponse.json({ success: result.modifiedCount > 0 });
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 500 });
+  }
+}
+
 // 🗑️ SUPPRIMER (DELETE)
 export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
-
-    if (!id || id === 'undefined') {
-        return NextResponse.json({ error: "ID invalide ou manquant" }, { status: 400 });
-    }
+    if (!id || id === 'undefined') return NextResponse.json({ error: "ID invalide" }, { status: 400 });
 
     const client = await clientPromise;
     const db = client.db("dndvault");
-    
-    // On convertit l'ID string en ObjectId pour MongoDB
-    const result = await db.collection("characters").deleteOne({ 
-      _id: new ObjectId(id) 
-    });
+    const result = await db.collection("characters").deleteOne({ _id: new ObjectId(id) });
 
     return NextResponse.json({ success: result.deletedCount > 0 });
   } catch (e: any) {
-    console.error("Erreur DELETE:", e);
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }

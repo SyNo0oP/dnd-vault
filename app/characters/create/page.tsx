@@ -1,213 +1,318 @@
 'use client';
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from "next-auth/react";
+import Link from 'next/link';
 
-export default function CreateCharacter() {
+function CreateCharacterForm() {
   const { data: session } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const editId = searchParams.get('id');
 
-  // Dictionnaire des Dés de Vie par classe
-  const classHitDice: { [key: string]: number } = {
-    "Barbare": 12,
-    "Guerrier": 10,
-    "Paladin": 10,
-    "Ranger": 10,
-    "Clerc": 8,
-    "Voleur": 8,
-    "Moine": 8,
-    "Barde": 8,
-    "Druide": 8,
-    "Sorcier": 8,
-    "Magicien": 6,
-    "Ensorceleur": 6
+  // --- DONNÉES DE RÈGLES (TES DONNÉES EXACTES) ---
+  const raceData: { [key: string]: { stats: { [key: string]: number }, speed: number, languages: string[] } } = {
+    "Humain": { stats: { force: 1, dexterite: 1, constitution: 1, intelligence: 1, sagesse: 1, charisme: 1 }, speed: 9, languages: ["Commun", "Une langue au choix"] },
+    "Elfe": { stats: { dexterite: 2 }, speed: 9, languages: ["Commun", "Elfique"] },
+    "Nain": { stats: { constitution: 2 }, speed: 7.5, languages: ["Commun", "Nain"] },
+    "Halfelin": { stats: { dexterite: 2 }, speed: 7.5, languages: ["Commun", "Halfelin"] },
+    "Demi-Orc": { stats: { force: 2, constitution: 1 }, speed: 9, languages: ["Commun", "Orc"] },
+    "Drakéide": { stats: { force: 2, charisme: 1 }, speed: 9, languages: ["Commun", "Draconique"] },
+    "Gnome": { stats: { intelligence: 2 }, speed: 7.5, languages: ["Commun", "Gnome"] },
+    "Tieffelin": { stats: { intelligence: 1, charisme: 2 }, speed: 9, languages: ["Commun", "Infernal"] }
   };
 
+  const classData: { [key: string]: { hd: number, skills: number, options: string[], equipment: string } } = {
+    "Barbare": { hd: 12, skills: 2, options: ["Athlétisme", "Dressage", "Intimidation", "Nature", "Perception", "Survie"], equipment: "Hache à deux mains, 2 hachettes, Pack d'explorateur, 4 javelots" },
+    "Guerrier": { hd: 10, skills: 2, options: ["Acrobaties", "Athlétisme", "Dressage", "Histoire", "Intimidation", "Intuition", "Perception", "Survie"], equipment: "Cotte de mailles, Épée longue, Bouclier, Arc long (20 flèches), Pack d'explorateur" },
+    "Paladin": { hd: 10, skills: 2, options: ["Athlétisme", "Intimidation", "Intuition", "Médecine", "Persuasion", "Religion"], equipment: "Épée longue, Bouclier, 5 javelots, Pack d'ecclésiastique, Symbole sacré" },
+    "Ranger": { hd: 10, skills: 3, options: ["Athlétisme", "Discrétion", "Dressage", "Investigation", "Nature", "Perception", "Perspicacité", "Survie"], equipment: "Armure d'écailles, 2 épées courtes, Arc long (20 flèches), Pack d'explorateur" },
+    "Clerc": { hd: 8, skills: 2, options: ["Histoire", "Intuition", "Médecine", "Persuasion", "Religion"], equipment: "Masse, Cuirasse, Bouclier, Arbalète légère, Pack d'ecclésiastique, Symbole sacré" },
+    "Voleur": { hd: 8, skills: 4, options: ["Acrobaties", "Athlétisme", "Discrétion", "Escamotage", "Intimidation", "Intuition", "Investigation", "Perception", "Perspicacité", "Persuasion", "Représentation"], equipment: "Rapière, Arc court (20 flèches), Pack de cambrioleur, Armure de cuir, 2 dagues, Outils de voleur" },
+    "Magicien": { hd: 6, skills: 2, options: ["Arcanes", "Histoire", "Intuition", "Investigation", "Médecine", "Religion"], equipment: "Bâton, Sacoche à composantes, Grimoire, Pack d'érudit, Dague" }
+  };
+
+  const backgrounds: { [key: string]: string[] } = {
+    "Soldat": ["Athlétisme", "Intimidation"], "Criminel": ["Discrétion", "Escamotage"],
+    "Noble": ["Histoire", "Persuasion"], "Sage": ["Arcanes", "Histoire"],
+    "Héros du Peuple": ["Dressage", "Survie"], "Sauvageon": ["Athlétisme", "Survie"]
+  };
+
+  const allSkills = [
+    { name: "Acrobaties", stat: "dexterite" }, { name: "Arcanes", stat: "intelligence" },
+    { name: "Athlétisme", stat: "force" }, { name: "Discrétion", stat: "dexterite" },
+    { name: "Dressage", stat: "sagesse" }, { name: "Escamotage", stat: "dexterite" },
+    { name: "Histoire", stat: "intelligence" }, { name: "Intimidation", stat: "charisme" },
+    { name: "Intuition", stat: "sagesse" }, { name: "Investigation", stat: "intelligence" },
+    { name: "Médecine", stat: "sagesse" }, { name: "Nature", stat: "intelligence" },
+    { name: "Perception", stat: "sagesse" }, { name: "Perspicacité", stat: "sagesse" },
+    { name: "Persuasion", stat: "charisme" }, { name: "Religion", stat: "intelligence" },
+    { name: "Représentation", stat: "charisme" }, { name: "Survie", stat: "sagesse" }
+  ];
+
   const [char, setChar] = useState({
-    name: '',
-    race: 'Humain',
-    class: 'Guerrier',
-    level: 1,
-    alignment: 'Neutre Strict',
-    stats: { force: 10, dexterite: 10, constitution: 10, intelligence: 10, sagesse: 10, charisme: 10 },
-    hpMax: 10,
-    speed: 30,
-    personality: '',
-    ideals: '',
-    bonds: '',
-    flaws: '',
-    features: '',
-    equipment: ''
+    name: '', race: 'Humain', class: 'Guerrier', level: 1, background: 'Soldat', alignment: 'Neutre Strict',
+    stats: { force: 8, dexterite: 8, constitution: 8, intelligence: 8, sagesse: 8, charisme: 8 },
+    classProficiencies: [] as string[],
+    hpMax: 10, speed: 9, personality: '', ideals: '', bonds: '', flaws: '', 
+    features: '', equipment: '', tools: '', languages: ''
   });
 
-  // Logique de calcul
+  useEffect(() => {
+    if (editId && session?.user?.email) {
+      fetch(`/api/characters?email=${session.user.email}`)
+        .then(res => res.json())
+        .then(data => {
+          const toEdit = Array.isArray(data) ? data.find((c: any) => c._id === editId) : null;
+          if (toEdit) setChar(toEdit);
+        })
+        .catch(err => console.error(err));
+    }
+  }, [editId, session]);
+
+  const getRaceBonus = (statName: string) => raceData[char.race]?.stats[statName] || 0;
+  const getTotalStat = (statName: string) => (char.stats as any)[statName] + getRaceBonus(statName);
   const getMod = (score: number) => Math.floor((score - 10) / 2);
   const formatMod = (score: number) => {
     const mod = getMod(score);
-    return mod >= 0 ? `+${mod}` : mod;
+    return mod >= 0 ? `+${mod}` : `${mod}`;
   };
+  const masteryBonus = Math.ceil(1 + char.level / 4);
+  const getPointCost = (val: number) => {
+    if (val <= 13) return val - 8;
+    if (val === 14) return 7;
+    if (val === 15) return 9;
+    return 0;
+  };
+  const pointsRemaining = 27 - Object.values(char.stats).reduce((acc, val) => acc + getPointCost(val), 0);
+  const backgroundSkills = backgrounds[char.background] || [];
+  const totalProficiencies = [...new Set([...backgroundSkills, ...char.classProficiencies])];
+  const maxClassSkills = classData[char.class]?.skills || 2;
+  const passivePerception = 10 + (totalProficiencies.includes("Perception") ? masteryBonus : 0) + getMod(getTotalStat("sagesse"));
 
-  // Mise à jour automatique des PV quand la classe ou la Constitution change
   useEffect(() => {
-    const baseHD = classHitDice[char.class] || 8;
-    const conMod = getMod(char.stats.constitution);
-    // Formule : (Dé de Vie max au niv 1) + Modificateur de Constitution
-    setChar(prev => ({ ...prev, hpMax: baseHD + conMod }));
-  }, [char.class, char.stats.constitution]);
+    const baseHD = classData[char.class]?.hd || 8;
+    const conMod = getMod(getTotalStat("constitution"));
+    const avgHitDie = (baseHD / 2) + 1;
+    const totalHP = baseHD + conMod + Math.max(0, (avgHitDie + conMod) * (char.level - 1));
+    setChar(prev => ({ 
+      ...prev, 
+      hpMax: totalHP, 
+      speed: raceData[char.race]?.speed || 9,
+      languages: prev.languages || raceData[char.race]?.languages.join(", ")
+    }));
+  }, [char.class, char.stats.constitution, char.race, char.level]);
 
-  const masteryBonus = 2; 
-  const armorClass = 10 + getMod(char.stats.dexterite);
+  const updateStat = (stat: string, newVal: number) => {
+    if (newVal < 8 || newVal > 15) return;
+    setChar(prev => ({ ...prev, stats: { ...prev.stats, [stat]: newVal } }));
+  };
+  const toggleClassSkill = (skillName: string) => {
+    if (backgroundSkills.includes(skillName)) return;
+    setChar(prev => {
+      const isSelected = prev.classProficiencies.includes(skillName);
+      if (!isSelected && prev.classProficiencies.length >= maxClassSkills) return prev;
+      return { ...prev, classProficiencies: isSelected ? prev.classProficiencies.filter(s => s !== skillName) : [...prev.classProficiencies, skillName] };
+    });
+  };
+  const generateStartingEquipment = () => setChar(prev => ({ ...prev, equipment: classData[char.class].equipment }));
 
-  const alignments = ["Loyal Bon", "Neutre Bon", "Chaotique Bon", "Loyal Neutre", "Neutre Strict", "Chaotique Neutre", "Loyal Mauvais", "Neutre Mauvais", "Chaotique Mauvais"];
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async () => {
+    if (!session?.user?.email) return alert("Connecte-toi !");
+    const method = editId ? 'PUT' : 'POST';
+    const url = editId ? `/api/characters?id=${editId}` : '/api/characters';
     try {
-      const response = await fetch('/api/characters', {
-        method: 'POST',
+      const response = await fetch(url, {
+        method: method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...char, userId: session?.user?.email }),
+        body: JSON.stringify({ ...char, userId: session.user.email, updatedAt: new Date() }),
       });
       if (response.ok) router.push('/characters');
-    } catch (error) {
-      alert("Erreur lors de la sauvegarde.");
-    }
+    } catch (error) { console.error(error); }
   };
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-200 p-4 md:p-8">
-      <form onSubmit={handleSubmit} className="max-w-5xl mx-auto space-y-8">
-        
-        {/* HEADER : IDENTITÉ AVEC CLASSE ET ALIGNEMENT */}
-        <div className="bg-slate-900 p-6 rounded-2xl border-b-4 border-amber-600 shadow-xl grid grid-cols-1 md:grid-cols-4 gap-6">
+    <main className="relative min-h-screen w-full overflow-hidden bg-slate-950 text-slate-200 p-4 md:p-8 flex items-center justify-center">
+      
+      {/* 1. ANIMATION CSS IMMERSIVE */}
+      <style jsx global>{`
+        @keyframes cocZoom {
+          0% { transform: scale(2.5) translateY(-10%); filter: blur(12px); opacity: 0; }
+          100% { transform: scale(1) translateY(0); filter: blur(0); opacity: 1; }
+        }
+        .animate-create-coc {
+          animation: cocZoom 2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+      `}</style>
+
+      {/* 2. LE FOND : TON IMAGE DE CRÉATION */}
+      <div 
+        className="absolute inset-0 z-0 animate-create-coc"
+        style={{
+          backgroundImage: `linear-gradient(to bottom, rgba(2,6,23,0.6), rgba(2,6,23,0.9)), url('/map3.jpg')`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+        }}
+      />
+
+      {/* 3. LE CONTENU (Z-10) */}
+      <div className="relative z-10 max-w-[1400px] w-full mx-auto space-y-6">
+        {/* Header Translucide */}
+        <div className="bg-slate-900/80 backdrop-blur-md p-6 rounded-2xl border-b-4 border-amber-600 shadow-2xl grid grid-cols-1 md:grid-cols-5 gap-6">
           <div className="md:col-span-1">
-            <label className="text-[10px] uppercase font-black text-amber-500 tracking-widest">Nom</label>
-            <input 
-              type="text" className="w-full bg-transparent text-2xl font-black border-b border-slate-700 outline-none focus:border-amber-500"
-              onChange={(e) => setChar({...char, name: e.target.value})}
-              required
-            />
+            <label className="text-[10px] uppercase font-black text-amber-500 block mb-1">Nom du Héros</label>
+            <input type="text" className="w-full bg-transparent text-xl font-black border-b border-slate-700 outline-none focus:border-amber-500 placeholder:text-slate-800 text-white" placeholder="Nom..." value={char.name || ''} onChange={(e) => setChar({...char, name: e.target.value})} />
           </div>
-          <div>
-            <label className="text-[10px] uppercase font-black text-slate-500 tracking-widest block">Classe</label>
-            <select 
-              className="w-full bg-slate-800 border-none rounded p-2 text-sm mt-1 outline-none text-amber-400 font-bold"
-              value={char.class}
-              onChange={(e) => setChar({...char, class: e.target.value})}
-            >
-              {Object.keys(classHitDice).map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="text-[10px] uppercase font-black text-slate-500 tracking-widest block">Race</label>
-            <input 
-              type="text" className="w-full bg-transparent border-b border-slate-700 py-1 outline-none focus:border-amber-500"
-              value={char.race}
-              onChange={(e) => setChar({...char, race: e.target.value})}
-            />
-          </div>
-          <div>
-            <label className="text-[10px] uppercase font-black text-slate-500 tracking-widest block">Alignement</label>
-            <select 
-              className="w-full bg-slate-800 border-none rounded p-2 text-sm mt-1 outline-none"
-              onChange={(e) => setChar({...char, alignment: e.target.value})}
-            >
-              {alignments.map(a => <option key={a} value={a}>{a}</option>)}
-            </select>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          
-          {/* STATS & MODS */}
-          <div className="lg:col-span-4 space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              {Object.entries(char.stats).map(([stat, val]) => (
-                <div key={stat} className="bg-slate-900 border border-slate-800 p-4 rounded-xl text-center relative group">
-                  <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">{stat}</label>
-                  <div className="text-3xl font-black text-amber-500">{formatMod(val)}</div>
-                  <input 
-                    type="number" value={val}
-                    className="w-12 bg-slate-800 text-center rounded-full text-xs font-bold py-1 mt-2 border border-slate-700"
-                    onChange={(e) => setChar({
-                      ...char, stats: {...char.stats, [stat]: parseInt(e.target.value) || 0}
-                    })}
-                  />
-                </div>
-              ))}
+          <div className="grid grid-cols-3 gap-2 md:col-span-2">
+            <div>
+              <label className="text-[10px] uppercase font-black text-slate-500 block mb-1">Niveau</label>
+              <input type="number" min="1" max="20" className="w-full bg-slate-800 rounded p-2 text-xs font-bold outline-none text-white" value={char.level} onChange={(e) => setChar({...char, level: parseInt(e.target.value) || 1})} />
             </div>
-            <div className="bg-slate-900 border border-amber-900/50 p-4 rounded-xl flex items-center justify-between">
-              <span className="text-xs font-black uppercase">Bonus de Maîtrise</span>
-              <span className="text-xl font-black text-amber-500">+{masteryBonus}</span>
+            <div>
+              <label className="text-[10px] uppercase font-black text-slate-500 block mb-1">Race</label>
+              <select className="w-full bg-slate-800 rounded p-2 text-xs outline-none text-white" value={char.race} onChange={(e) => setChar({...char, race: e.target.value})}>
+                {Object.keys(raceData).map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] uppercase font-black text-slate-500 block mb-1">Classe</label>
+              <select className="w-full bg-slate-800 rounded p-2 text-xs text-amber-400 font-bold outline-none" value={char.class} onChange={(e) => setChar({...char, class: e.target.value, classProficiencies: []})}>
+                {Object.keys(classData).map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
             </div>
           </div>
-
-          {/* COMBAT & PV */}
-          <div className="lg:col-span-4 space-y-6">
-            <div className="grid grid-cols-3 gap-4">
-              <div className="bg-slate-900 border-2 border-slate-800 p-4 rounded-2xl text-center">
-                <label className="text-[8px] uppercase font-black text-slate-500">CA</label>
-                <div className="text-2xl font-black">{armorClass}</div>
-              </div>
-              <div className="bg-slate-900 border-2 border-slate-800 p-4 rounded-2xl text-center">
-                <label className="text-[8px] uppercase font-black text-slate-500">Initiative</label>
-                <div className="text-2xl font-black">{formatMod(char.stats.dexterite)}</div>
-              </div>
-              <div className="bg-slate-900 border-2 border-slate-800 p-4 rounded-2xl text-center">
-                <label className="text-[8px] uppercase font-black text-slate-500">Vitesse</label>
-                <input 
-                   type="number" className="bg-transparent w-full text-center text-xl font-black outline-none" 
-                   value={char.speed} onChange={(e) => setChar({...char, speed: parseInt(e.target.value) || 0})}
-                />
-              </div>
-            </div>
-
-            {/* SECTION PV AUTOMATISÉE */}
-            <div className="bg-slate-900 border-2 border-red-900/40 p-6 rounded-3xl relative">
-              <label className="text-[10px] uppercase font-black text-red-500 tracking-widest absolute -top-3 left-6 bg-slate-950 px-2">Points de Vie</label>
-              <div className="flex items-center justify-between">
-                <div className="text-4xl font-black text-white">{char.hpMax}</div>
-                <div className="text-right">
-                  <div className="text-slate-500 text-[10px] font-black uppercase">Maximum</div>
-                  <div className="text-[9px] text-amber-600 font-bold italic">Base {char.class} ({classHitDice[char.class]}) + CON ({getMod(char.stats.constitution)})</div>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
-               <h4 className="text-[10px] font-black uppercase text-amber-500 mb-3 tracking-widest">Capacités & Traits</h4>
-               <textarea 
-                className="w-full bg-slate-800/50 border border-slate-700 rounded-lg p-3 text-sm h-32 outline-none focus:border-amber-500"
-                placeholder="Ex: Vision dans le noir, Second souffle..."
-                onChange={(e) => setChar({...char, features: e.target.value})}
-               ></textarea>
-            </div>
-          </div>
-
-          {/* RP & INVENTAIRE */}
-          <div className="lg:col-span-4 space-y-4">
-            <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 space-y-3 font-serif italic">
-              <input type="text" placeholder="Traits de personnalité" className="w-full bg-slate-800 border-none rounded p-2 text-xs" onChange={(e) => setChar({...char, personality: e.target.value})}/>
-              <input type="text" placeholder="Idéaux" className="w-full bg-slate-800 border-none rounded p-2 text-xs" onChange={(e) => setChar({...char, ideals: e.target.value})}/>
-              <input type="text" placeholder="Liens" className="w-full bg-slate-800 border-none rounded p-2 text-xs" onChange={(e) => setChar({...char, bonds: e.target.value})}/>
-              <input type="text" placeholder="Défauts" className="w-full bg-slate-800 border-none rounded p-2 text-xs" onChange={(e) => setChar({...char, flaws: e.target.value})}/>
-            </div>
-            
-            <div className="bg-amber-900/10 border border-amber-900/30 p-4 rounded-xl">
-               <h4 className="text-[10px] font-black uppercase text-amber-700 mb-3">Inventaire</h4>
-               <textarea 
-                className="w-full bg-transparent border border-amber-900/20 rounded p-2 text-xs h-24 outline-none"
-                placeholder="Votre équipement..."
-                onChange={(e) => setChar({...char, equipment: e.target.value})}
-               ></textarea>
-            </div>
+          <div className="flex items-center justify-around bg-slate-950/50 rounded-xl p-2 border border-slate-800 md:col-span-2">
+             <div className="text-center">
+                <p className="text-[8px] font-black text-slate-500 uppercase tracking-tighter">PV Max</p>
+                <p className="text-xl font-black text-red-500">{char.hpMax}</p>
+                <p className="text-[9px] text-slate-600 font-bold uppercase">{char.level}d{classData[char.class].hd}</p>
+             </div>
+             <div className="text-center">
+                <p className="text-[8px] font-black text-slate-500 uppercase tracking-tighter">Maîtrise</p>
+                <p className="text-xl font-black text-blue-400">+{masteryBonus}</p>
+             </div>
+             <div className="text-center">
+                <p className="text-[8px] font-black text-slate-500 uppercase tracking-tighter">CA</p>
+                <p className="text-xl font-black text-amber-500">{10 + getMod(getTotalStat("dexterite"))}</p>
+             </div>
+             <div className="text-center">
+                <p className="text-[8px] font-black text-slate-500 uppercase tracking-tighter">Vitesse</p>
+                <p className="text-xl font-black text-white">{char.speed}m</p>
+             </div>
           </div>
         </div>
 
-        <button type="submit" className="w-full bg-amber-600 hover:bg-amber-500 text-slate-950 font-black py-4 rounded-2xl transition-all shadow-xl uppercase tracking-widest">
-          Inscrire dans la légende
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* STATS */}
+          <div className="bg-slate-900/80 backdrop-blur-md p-5 rounded-2xl border border-slate-800 space-y-3 shadow-xl hover:border-amber-600/30 transition-colors">
+            <h3 className="text-[10px] font-black uppercase text-amber-500 tracking-widest text-center mb-4 italic">Attributs (Budget 27)</h3>
+            <p className={`text-center text-xl font-black mb-4 ${pointsRemaining < 0 ? 'text-red-500' : 'text-white'}`}>{pointsRemaining} <span className="text-xs text-slate-500 uppercase">Pts</span></p>
+            {Object.entries(char.stats).map(([stat, val]) => (
+              <div key={stat} className="bg-slate-950/80 p-3 rounded-xl border border-slate-800">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-[9px] uppercase font-black text-slate-400">{stat}</span>
+                  <span className="text-[9px] text-amber-600 font-bold italic">+{getRaceBonus(stat)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <button type="button" onClick={() => updateStat(stat, val - 1)} className="w-6 h-6 bg-slate-800 rounded flex items-center justify-center hover:bg-red-600 transition-colors text-white">-</button>
+                    <span className="text-md font-black w-5 text-center text-white">{val}</span>
+                    <button type="button" onClick={() => updateStat(stat, val + 1)} className="w-6 h-6 bg-slate-800 rounded flex items-center justify-center hover:bg-green-600 transition-colors text-white">+</button>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-lg font-black text-white leading-none block">{getTotalStat(stat)}</span>
+                    <span className="text-[10px] font-black text-amber-500 uppercase tracking-tighter">{formatMod(getTotalStat(stat))}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* COMPÉTENCES */}
+          <div className="bg-slate-900/60 backdrop-blur-md p-5 rounded-2xl border border-slate-800 space-y-4 shadow-xl">
+            <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
+                <p className="text-[8px] uppercase font-black text-slate-500 tracking-widest">Sagesse Passive</p>
+                <p className="text-2xl font-black text-amber-500">{passivePerception}</p>
+            </div>
+            <div className="space-y-1 max-h-[350px] overflow-y-auto pr-1 custom-scrollbar">
+              {allSkills.map(s => {
+                const isOption = classData[char.class].options.includes(s.name);
+                const isBG = backgroundSkills.includes(s.name);
+                const isChecked = totalProficiencies.includes(s.name);
+                const bonus = (isChecked ? masteryBonus : 0) + getMod(getTotalStat(s.stat));
+                return (
+                  <div key={s.name} className={`flex items-center gap-2 p-1.5 rounded border transition-all ${isBG ? 'border-amber-600/30 bg-amber-600/5' : isOption ? 'border-slate-800 bg-slate-950/40' : 'border-transparent opacity-20'}`}>
+                    <input type="checkbox" checked={isChecked} disabled={isBG || !isOption} onChange={() => toggleClassSkill(s.name)} className="w-3 h-3 accent-amber-500" />
+                    <span className={`text-[10px] font-black w-6 ${isChecked ? 'text-amber-500' : 'text-slate-600'}`}>{bonus >= 0 ? `+${bonus}` : bonus}</span>
+                    <span className="text-[10px] flex-1 truncate uppercase font-medium">{s.name}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* DIVERS */}
+          <div className="space-y-4">
+            <div className="bg-slate-900/60 backdrop-blur-md p-4 rounded-xl border border-slate-800 space-y-3 shadow-lg">
+                <div>
+                  <label className="text-[9px] font-black uppercase text-amber-500 mb-1 block">Outils</label>
+                  <textarea className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-[11px] h-14 outline-none text-slate-400 resize-none focus:border-amber-600" value={char.tools || ''} onChange={(e) => setChar({...char, tools: e.target.value})} placeholder="Dés, Luth..."></textarea>
+                </div>
+                <div>
+                  <label className="text-[9px] font-black uppercase text-amber-500 mb-1 block">Langues</label>
+                  <input className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-[11px] outline-none text-slate-400 focus:border-amber-600" value={char.languages || ''} onChange={(e) => setChar({...char, languages: e.target.value})} />
+                </div>
+            </div>
+            <div className="bg-slate-900/60 backdrop-blur-md p-4 rounded-xl border border-slate-800 shadow-lg">
+               <label className="text-[9px] font-black uppercase text-amber-500 mb-1 block tracking-widest">Capacités</label>
+               <textarea className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-[11px] h-48 outline-none text-slate-300 resize-none focus:border-amber-600" value={char.features || ''} onChange={(e) => setChar({...char, features: e.target.value})} placeholder="Vos traits..."></textarea>
+            </div>
+          </div>
+
+          {/* INVENTAIRE */}
+          <div className="space-y-4">
+             <div className="bg-slate-900/60 backdrop-blur-md p-4 rounded-xl border border-slate-800 shadow-lg">
+                <div className="flex justify-between items-center mb-2">
+                    <label className="text-[9px] font-black uppercase text-amber-500">Équipement</label>
+                    <button type="button" onClick={generateStartingEquipment} className="text-[8px] bg-amber-600/10 text-amber-500 px-2 py-1 rounded hover:bg-amber-600 hover:text-slate-950 transition-all uppercase font-black">Pack de départ</button>
+                </div>
+                <textarea className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-[11px] h-32 italic text-amber-200/60 outline-none resize-none focus:border-amber-600" value={char.equipment || ''} onChange={(e) => setChar({...char, equipment: e.target.value})}></textarea>
+             </div>
+             <div className="bg-slate-900/60 backdrop-blur-md p-4 rounded-xl border border-slate-800 space-y-3 shadow-lg">
+                {['personality', 'ideals', 'bonds', 'flaws'].map(f => (
+                  <div key={f}>
+                    <label className="text-[8px] uppercase font-bold text-amber-700/60 block mb-1">{f}</label>
+                    <textarea className="w-full bg-slate-800/20 border-b border-slate-700 text-[11px] h-12 resize-none outline-none p-1 focus:border-amber-500 text-slate-300" value={(char as any)[f] || ''} onChange={(e) => setChar({...char, [f]: e.target.value})}></textarea>
+                  </div>
+                ))}
+             </div>
+          </div>
+        </div>
+
+        <button 
+          type="button"
+          onClick={handleSubmit}
+          disabled={pointsRemaining < 0 || char.classProficiencies.length < maxClassSkills || !char.name}
+          className={`w-full py-6 rounded-2xl font-black uppercase tracking-[0.4em] transition-all duration-300 ${
+            pointsRemaining < 0 || char.classProficiencies.length < maxClassSkills || !char.name
+            ? 'bg-slate-800 text-slate-600 cursor-not-allowed opacity-50'
+            : 'bg-amber-600 hover:bg-amber-500 text-slate-950 shadow-2xl shadow-amber-900/40 transform active:scale-95'
+          }`}
+        >
+          {pointsRemaining < 0 ? "Budget points dépassé" : !char.name ? "Nom requis" : editId ? "Enregistrer les modifications" : "Graver la Légende"}
         </button>
-      </form>
+      </div>
+
+      {/* 4. VIGNETTE SOMBRE */}
+      <div className="absolute inset-0 pointer-events-none shadow-[inset_0_0_200px_rgba(0,0,0,1)] z-[1]"></div>
     </main>
+  );
+}
+
+export default function CreateCharacter() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-950 flex items-center justify-center text-amber-500 font-black animate-pulse uppercase tracking-[0.5em]">Grimoire en chargement...</div>}>
+      <CreateCharacterForm />
+    </Suspense>
   );
 }

@@ -1,112 +1,124 @@
 'use client';
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
 import { useSession } from "next-auth/react";
+import Link from 'next/link';
 
 export default function MyCharacters() {
   const { data: session } = useSession();
-  // On précise <any[]> pour que TS arrête de râler sur le map
-  const [heroes, setHeroes] = useState<any[]>([]);
+  const [characters, setCharacters] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchHeroes = async () => {
-    if (session?.user?.email) {
-      try {
-        const res = await fetch(`/api/characters?email=${session.user.email}`);
-        if (!res.ok) throw new Error("Erreur serveur");
-        const data = await res.json();
-        setHeroes(Array.isArray(data) ? data : []);
-      } catch (error) {
-        console.error("Erreur de chargement:", error);
-      } finally {
-        setLoading(false);
-      }
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    if (!confirm("Voulez-vous vraiment supprimer ce héros ?")) return;
-
-    try {
-      const res = await fetch(`/api/characters?id=${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        setHeroes((prev) => prev.filter((h) => h._id !== id));
-      }
-    } catch (error) {
-      alert("Erreur lors de la suppression");
-    }
-  };
-
   useEffect(() => {
-    if (session) fetchHeroes();
+    if (session?.user?.email) {
+      fetch(`/api/characters?email=${session.user.email}`)
+        .then(res => res.json())
+        .then(data => {
+          setCharacters(data);
+          setLoading(false);
+        });
+    }
   }, [session]);
 
-  if (!session) {
-    return (
-      <main className="min-h-screen flex items-center justify-center bg-slate-950 p-8">
-        <div className="text-center p-12 border-2 border-dashed border-slate-800 rounded-3xl">
-          <p className="text-slate-500 font-bold uppercase tracking-widest">Connexion requise</p>
-        </div>
-      </main>
-    );
-  }
+  const deleteCharacter = async (id: string) => {
+    if (!confirm("Voulez-vous vraiment effacer cette légende ?")) return;
+    const res = await fetch(`/api/characters?id=${id}`, { method: 'DELETE' });
+    if (res.ok) {
+      setCharacters(characters.filter((c: any) => c._id !== id));
+    }
+  };
 
   return (
-    <main className="min-h-screen bg-slate-950 p-4 md:p-12 text-slate-100">
-      <div className="max-w-6xl mx-auto">
-        
-        <header className="flex justify-between items-end mb-12 border-b border-amber-900/30 pb-6">
-          <div>
-            <h1 className="text-4xl font-black text-amber-500 uppercase tracking-tighter">Mes Héros</h1>
-            <p className="text-slate-400 font-medium italic">Effectif de la guilde : {heroes.length}</p>
-          </div>
+    <main className="relative min-h-screen w-full overflow-hidden bg-slate-950 flex flex-col items-center p-4 md:p-8">
+      
+      {/* 1. L'ANIMATION "CLASH OF CLANS" */}
+      <style jsx global>{`
+        @keyframes cocZoom {
+          0% { 
+            transform: scale(2.2) translateY(-5%); 
+            filter: blur(10px);
+            opacity: 0;
+          }
+          100% { 
+            transform: scale(1) translateY(0); 
+            filter: blur(0);
+            opacity: 1;
+          }
+        }
+        .animate-heroes-coc {
+          animation: cocZoom 1.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+      `}</style>
+
+      {/* 2. LE FOND : IMAGE map3.jpg */}
+      <div 
+        className="absolute inset-0 z-0 animate-heroes-coc"
+        style={{
+          backgroundImage: `linear-gradient(to bottom, rgba(2,6,23,0.4), rgba(2,6,23,0.8)), url('/map2.jpg')`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+        }}
+      />
+
+      {/* 3. LE CONTENU (Z-10) */}
+      <div className="relative z-10 w-full max-w-6xl mx-auto">
+        <div className="flex justify-between items-center mb-12">
+          <h1 className="text-5xl font-black text-white tracking-tighter drop-shadow-2xl">
+            MES <span className="text-amber-500 italic">HÉROS</span>
+          </h1>
           <Link href="/characters/create">
-            <button className="bg-amber-600 hover:bg-amber-500 text-slate-950 font-black px-6 py-3 rounded-xl transition-all shadow-lg shadow-amber-900/20 uppercase text-[10px] tracking-widest active:scale-95">
-              + Invoquer un Héros
+            <button className="px-6 py-3 bg-amber-600 text-slate-950 font-black uppercase tracking-widest rounded-xl hover:bg-amber-500 transition-all shadow-xl transform active:scale-95">
+              + NOUVEAU
             </button>
           </Link>
-        </header>
+        </div>
 
         {loading ? (
-          <div className="text-center py-20 text-amber-500 animate-pulse font-black uppercase tracking-widest">
-            Lecture du grimoire...
-          </div>
+          <p className="text-amber-500 font-black animate-pulse text-center uppercase tracking-widest">Lecture du Grimoire...</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {heroes.map((hero) => (
-              <div key={hero._id} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 hover:border-amber-600/50 transition-all group relative overflow-hidden">
-                <div className="absolute top-0 right-0 bg-amber-600 text-slate-950 font-black px-4 py-1 rounded-bl-xl text-[10px]">
-                  LVL {hero.level || 1}
+            {characters.map((c: any) => (
+              <div key={c._id} className="group bg-slate-900/70 backdrop-blur-xl p-6 rounded-3xl border border-white/10 hover:border-amber-500 transition-all shadow-2xl relative overflow-hidden">
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <h2 className="text-2xl font-black text-white uppercase truncate w-40">{c.name}</h2>
+                    <p className="text-amber-500 font-bold text-xs uppercase">{c.race} {c.class}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] font-black text-slate-500 uppercase">Niveau</p>
+                    <p className="text-xl font-black text-white">{c.level}</p>
+                  </div>
                 </div>
 
-                <h3 className="text-2xl font-black text-amber-200 mb-1">{hero.name}</h3>
-                
-                {/* On vérifie que hero.stats existe avant de faire le Object.entries */}
-                <div className="grid grid-cols-3 gap-2 mb-6 mt-4">
-                  {hero.stats && Object.entries(hero.stats).map(([stat, val]: any) => (
-                    <div key={stat} className="bg-slate-800/50 p-2 rounded-lg text-center border border-slate-700/50">
-                      <p className="text-[8px] uppercase text-slate-500 font-black mb-1">{stat.substring(0,3)}</p>
-                      <p className="text-sm font-bold text-slate-200">{val}</p>
-                    </div>
-                  ))}
+                {/* Barre de PV visuelle */}
+                <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 mb-6 flex justify-between items-center">
+                   <span className="text-[10px] font-black text-slate-500 uppercase">PV Max</span>
+                   <span className="text-lg font-black text-red-500">{c.hpMax}</span>
                 </div>
 
-                <div className="flex gap-2 border-t border-slate-800 pt-4 mt-2">
-                  <button className="flex-1 bg-slate-800 hover:bg-slate-700 text-white text-[10px] font-black py-2 rounded-lg transition-colors border border-slate-700 uppercase">
-                    Fiche Détails
-                  </button>
+                <div className="flex gap-2">
+                  <Link href={`/characters/create?id=${c._id}`} className="flex-1">
+                    <button className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-colors">
+                      Modifier
+                    </button>
+                  </Link>
                   <button 
-                    onClick={() => handleDelete(hero._id)}
-                    className="p-2 bg-red-950/20 hover:bg-red-600 text-red-600 hover:text-white rounded-lg transition-all border border-red-900/30"
+                    onClick={() => deleteCharacter(c._id)}
+                    className="px-4 py-3 bg-red-900/20 hover:bg-red-600 text-red-500 hover:text-white rounded-xl transition-all"
                   >
                     🗑️
                   </button>
                 </div>
+                
+                {/* Effet au survol */}
+                <div className="absolute inset-0 bg-gradient-to-tr from-amber-500/0 via-amber-500/0 to-amber-500/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* VIGNETTE SOMBRE SUR LES BORDURES */}
+      <div className="absolute inset-0 pointer-events-none shadow-[inset_0_0_200px_rgba(0,0,0,1)] z-[1]"></div>
     </main>
   );
 }
