@@ -20,14 +20,30 @@ export default function BestiaryPage() {
     image: "",
   });
 
+  // 1. CHARGEMENT : API + LocalStorage
   useEffect(() => {
+    // Fetch API SRD
     fetch("https://www.dnd5eapi.co/api/monsters")
       .then((res) => res.json())
       .then((data) => {
         setSrdMonsters(data.results);
         setIsLoading(false);
       });
+
+    // Charger les créations sauvegardées
+    const saved = localStorage.getItem("dnd_vault_creations");
+    if (saved) {
+      setMyCreations(JSON.parse(saved));
+    }
   }, []);
+
+  // 2. SAUVEGARDE : Dès que la liste "myCreations" change
+  useEffect(() => {
+    // On ne sauvegarde que si le chargement initial est terminé pour éviter d'écraser par du vide
+    if (!isLoading) {
+      localStorage.setItem("dnd_vault_creations", JSON.stringify(myCreations));
+    }
+  }, [myCreations, isLoading]);
 
   const filteredList = useMemo(() => {
     const activeList = currentTab === "srd" ? srdMonsters : myCreations;
@@ -43,6 +59,18 @@ export default function BestiaryPage() {
       setSelectedMonster(details);
     } else {
       setSelectedMonster(monster);
+    }
+  };
+
+  // GESTION DE L'IMAGE (Conversion en texte pour stockage)
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setNewMonster({ ...newMonster, image: reader.result as string });
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -65,8 +93,10 @@ export default function BestiaryPage() {
   };
 
   const deleteMonster = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation(); // Pour ne pas ouvrir la modale de détails en cliquant sur supprimer
-    setMyCreations(myCreations.filter((m) => m.id !== id));
+    e.stopPropagation();
+    if (confirm("Supprimer définitivement ce monstre de vos archives ?")) {
+      setMyCreations(myCreations.filter((m) => m.id !== id));
+    }
   };
 
   return (
@@ -107,13 +137,13 @@ export default function BestiaryPage() {
               onClick={() => setCurrentTab("creations")}
               className={`px-6 py-2 rounded-lg text-[10px] font-bold uppercase transition-all ${currentTab === "creations" ? "bg-amber-500 text-slate-950" : "text-slate-500"}`}
             >
-              Mes Créations
+              Mes Créations ({myCreations.length})
             </button>
           </div>
           <input
             type="text"
             placeholder="Filtrer par nom..."
-            className="flex-1 bg-slate-950 border border-white/10 rounded-xl px-4 text-xs outline-none focus:border-amber-500/50"
+            className="flex-1 bg-slate-950 border border-white/10 rounded-xl px-4 text-xs outline-none focus:border-amber-500/50 transition-all"
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
@@ -229,13 +259,7 @@ export default function BestiaryPage() {
                       type="file"
                       accept="image/*"
                       className="text-[10px] text-slate-500"
-                      onChange={(e) => {
-                        if (e.target.files?.[0])
-                          setNewMonster({
-                            ...newMonster,
-                            image: URL.createObjectURL(e.target.files[0]),
-                          });
-                      }}
+                      onChange={handleImageChange}
                     />
                   </div>
                 </div>
@@ -260,7 +284,7 @@ export default function BestiaryPage() {
           </div>
         )}
 
-        {/* MODALE DE DÉTAILS (Utilise les mêmes stats pour les deux types) */}
+        {/* MODALE DE DÉTAILS */}
         {selectedMonster && (
           <div
             className="fixed inset-0 z-[300] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4"
