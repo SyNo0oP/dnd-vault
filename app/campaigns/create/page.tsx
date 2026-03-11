@@ -14,6 +14,9 @@ const createNewSubAct = (index: number) => ({
   opacity: 0.3,
   offsetX: 0,
   offsetY: 0,
+  // --- NOUVEAUX CHAMPS ---
+  hasFog: false, // Brouillard activé ou non
+  monsters: [], // Liste des monstres placés sur cette map
 });
 
 function CreateCampaignForm() {

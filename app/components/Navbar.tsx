@@ -28,7 +28,15 @@ export default function Navbar() {
           >
             Mes Héros
           </Link>
-          {/* NOUVEL ONGLET CAMPAGNES - STYLE FIN */}
+
+          {/* NOUVEL ONGLET BESTIAIRE */}
+          <Link
+            href="/bestiary"
+            className="text-sm font-medium hover:text-amber-400 transition-colors"
+          >
+            <span className="text-[10px]"></span> Bestiaire
+          </Link>
+
           <Link
             href="/campaigns"
             className="text-sm font-medium hover:text-amber-400 transition-colors"
