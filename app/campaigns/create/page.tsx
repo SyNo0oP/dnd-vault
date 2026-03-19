@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import MapConfigModal from "@/app/components/MapConfigModal";
 
-// Factory pour créer une nouvelle instance de scène unique (évite les problèmes de référence)
+// Factory pour créer une nouvelle instance de scène unique
 const createNewSubAct = (index: number) => ({
   title: `Scène ${index}`,
   description: "",
@@ -14,9 +14,8 @@ const createNewSubAct = (index: number) => ({
   opacity: 0.3,
   offsetX: 0,
   offsetY: 0,
-  // --- NOUVEAUX CHAMPS ---
-  hasFog: false, // Brouillard activé ou non
-  monsters: [], // Liste des monstres placés sur cette map
+  hasFog: false,
+  monsters: [],
 });
 
 function CreateCampaignForm() {
@@ -82,7 +81,7 @@ function CreateCampaignForm() {
         ...config.acts,
         {
           title: `Acte ${config.acts.length + 1}`,
-          subActs: [createNewSubAct(1)], // Utilisation de la factory pour un objet neuf
+          subActs: [createNewSubAct(1)],
         },
       ],
     });
@@ -90,7 +89,6 @@ function CreateCampaignForm() {
 
   const addSubAct = (actIndex: number) => {
     const newActs = [...config.acts];
-    // On pousse un nouvel objet unique retourné par la factory
     newActs[actIndex].subActs.push(
       createNewSubAct(newActs[actIndex].subActs.length + 1),
     );
@@ -108,20 +106,22 @@ function CreateCampaignForm() {
     setConfig({ ...config, acts: newActs });
   };
 
+  // --- LOGIQUE DE SAUVEGARDE MONGODB ---
   const handleSubmit = async () => {
-    if (!session?.user?.email) return alert("Connecte-toi d'abord !");
+    if (!session?.user?.email)
+      return alert("Connecte-toi d'abord avec Discord !");
     if (!config.name) return alert("Le nom de la campagne est requis !");
 
     setLoading(true);
     const method = editId ? "PATCH" : "POST";
-    const payload = editId
-      ? { ...config, id: editId }
-      : {
-          ...config,
-          creatorEmail: session.user.email,
-          joinCode: Math.random().toString(36).substring(2, 8).toUpperCase(),
-          createdAt: new Date(),
-        };
+
+    // IMPORTANT : On ajoute creatorEmail pour que l'API MongoDB puisse filtrer par utilisateur
+    const payload = {
+      ...config,
+      creatorEmail: session.user.email,
+      id: editId || undefined,
+      updatedAt: new Date(),
+    };
 
     try {
       const res = await fetch("/api/campaigns", {
@@ -129,12 +129,22 @@ function CreateCampaignForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+
       if (res.ok) {
-        router.push("/campaigns");
-        router.refresh();
+        // Petite pause pour s'assurer que MongoDB a bien indexé la donnée
+        setTimeout(() => {
+          router.push("/campaigns");
+          router.refresh();
+        }, 500);
+      } else {
+        const errorData = await res.json();
+        alert(
+          `Erreur MongoDB : ${errorData.error || "Impossible d'enregistrer"}`,
+        );
       }
     } catch (error) {
-      console.error(error);
+      console.error("Erreur réseau :", error);
+      alert("Erreur réseau lors de la sauvegarde.");
     } finally {
       setLoading(false);
     }
@@ -355,7 +365,6 @@ function CreateCampaignForm() {
         onSave={(mapSettings) => {
           if (activePath) {
             const newActs = [...config.acts];
-            // On s'assure de fusionner dans une nouvelle copie de l'objet subAct
             newActs[activePath.aIdx].subActs[activePath.sIdx] = {
               ...newActs[activePath.aIdx].subActs[activePath.sIdx],
               ...mapSettings,
