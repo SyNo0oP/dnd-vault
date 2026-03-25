@@ -18,9 +18,12 @@ export default function GameSession({
     currentSubAct: 0,
     campaign: null as any,
     players: [] as any[],
+    monsters: [] as any[],
+    fogRevealedCells: [] as string[],
     log: ["La session commence..."],
   });
 
+  // Chargement initial
   useEffect(() => {
     fetch(`/api/sessions?code=${code}`)
       .then((res) => res.json())
@@ -31,11 +34,42 @@ export default function GameSession({
             campaign: data.campaign,
             currentAct: data.session.currentAct ?? 0,
             currentSubAct: data.session.currentSubAct ?? 0,
+            monsters: data.session.monsters ?? [],
+            fogRevealedCells: data.session.fogRevealedCells ?? [],
+            players: data.session.players ?? [],
+            log: data.session.log ?? ["La session commence..."],
           }));
         }
       })
       .catch((err) => console.error("Erreur chargement session:", err));
   }, [code]);
+
+  // Polling toutes les 2s — joueurs reçoivent passivement, MJ est source de vérité
+  useEffect(() => {
+    const poll = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/sessions?code=${code}`);
+        const data = await res.json();
+        if (!data.session) return;
+        if (isDM) return;
+        setGameState((prev) => ({
+          ...prev,
+          currentAct: data.session.currentAct ?? prev.currentAct,
+          currentSubAct: data.session.currentSubAct ?? prev.currentSubAct,
+          monsters: data.session.monsters ?? prev.monsters,
+          fogRevealedCells: data.session.fogRevealedCells ?? prev.fogRevealedCells,
+          players:
+            (data.session.players as any[])?.length > 0
+              ? data.session.players
+              : prev.players,
+          log: data.session.log ?? prev.log,
+        }));
+      } catch (e) {
+        console.error("Polling error:", e);
+      }
+    }, 2000);
+    return () => clearInterval(poll);
+  }, [code, isDM]);
 
   const currentScene =
     gameState.campaign?.acts[gameState.currentAct]?.subActs[
