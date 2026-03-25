@@ -1,7 +1,70 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import BattleGrid from "@/app/components/BattleGrid";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface Player {
+  id: string;
+  name: string;
+  class: string;
+  hp: number;
+  maxHp: number;
+  ac: number;
+  x: number;
+  y: number;
+  str?: number;
+  dex?: number;
+  con?: number;
+}
+
+interface Monster {
+  name: string;
+  x: number;
+  y: number;
+}
+
+interface SubAct {
+  title: string;
+  mapUrl?: string;
+  gridSize?: number;
+  gridType?: string;
+  offsetX?: number;
+  offsetY?: number;
+  opacity?: number;
+  monsters?: Monster[];
+}
+
+interface Act {
+  title: string;
+  subActs: SubAct[];
+}
+
+interface Campaign {
+  acts: Act[];
+}
+
+interface GameState {
+  currentAct: number;
+  currentSubAct: number;
+  campaign: Campaign | null;
+  players: Player[];
+  monsters: Monster[];
+  fogRevealedCells: string[];
+  log: string[];
+}
+
+interface SessionSyncFields {
+  currentAct?: number;
+  currentSubAct?: number;
+  monsters?: Monster[];
+  fogRevealedCells?: string[];
+  players?: Player[];
+  log?: string[];
+}
+
+// ─── Composant ────────────────────────────────────────────────────────────────
 
 export default function GameSession({
   params,
@@ -10,20 +73,31 @@ export default function GameSession({
 }) {
   const { code } = React.use(params);
   const searchParams = useSearchParams();
-  const role = searchParams.get("role");
-  const isDM = role === "dm";
+  const isDM = searchParams.get("role") === "dm";
 
-  const [gameState, setGameState] = useState({
+  const [gameState, setGameState] = useState<GameState>({
     currentAct: 0,
     currentSubAct: 0,
-    campaign: null as any,
-    players: [] as any[],
-    monsters: [] as any[],
-    fogRevealedCells: [] as string[],
+    campaign: null,
+    players: [],
+    monsters: [],
+    fogRevealedCells: [],
     log: ["La session commence..."],
   });
 
-  // Chargement initial
+  const [dmHpInputs, setDmHpInputs] = useState<Record<string, string>>({});
+  const [fogEditMode, setFogEditMode] = useState(false);
+  const fogCanvasRef = useRef<HTMLCanvasElement>(null);
+  const fogWrapperRef = useRef<HTMLDivElement>(null);
+
+  // Déclaré tôt pour être accessible dans les hooks
+  const currentScene =
+    gameState.campaign?.acts[gameState.currentAct]?.subActs[
+      gameState.currentSubAct
+    ];
+
+  // ── Chargement initial ────────────────────────────────────────────────────
+
   useEffect(() => {
     fetch(`/api/sessions?code=${code}`)
       .then((res) => res.json())
@@ -44,7 +118,8 @@ export default function GameSession({
       .catch((err) => console.error("Erreur chargement session:", err));
   }, [code]);
 
-  // Polling toutes les 2s — joueurs reçoivent passivement, MJ est source de vérité
+  // ── Polling 2s (joueurs uniquement) ───────────────────────────────────────
+
   useEffect(() => {
     const poll = setInterval(async () => {
       try {
@@ -57,9 +132,10 @@ export default function GameSession({
           currentAct: data.session.currentAct ?? prev.currentAct,
           currentSubAct: data.session.currentSubAct ?? prev.currentSubAct,
           monsters: data.session.monsters ?? prev.monsters,
-          fogRevealedCells: data.session.fogRevealedCells ?? prev.fogRevealedCells,
+          fogRevealedCells:
+            data.session.fogRevealedCells ?? prev.fogRevealedCells,
           players:
-            (data.session.players as any[])?.length > 0
+            (data.session.players as Player[])?.length > 0
               ? data.session.players
               : prev.players,
           log: data.session.log ?? prev.log,
@@ -71,14 +147,177 @@ export default function GameSession({
     return () => clearInterval(poll);
   }, [code, isDM]);
 
-  const currentScene =
-    gameState.campaign?.acts[gameState.currentAct]?.subActs[
-      gameState.currentSubAct
-    ];
+  // ── syncToServer ──────────────────────────────────────────────────────────
+
+  const syncToServer = useCallback(
+    async (fields: SessionSyncFields) => {
+      try {
+        await fetch("/api/sessions", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code, ...fields }),
+        });
+      } catch (e) {
+        console.error("Erreur sync:", e);
+      }
+    },
+    [code]
+  );
+
+  // ── Action 1 : Changer d'acte ─────────────────────────────────────────────
+
+  const changeAct = (actIdx: number) => {
+    const update: SessionSyncFields = {
+      currentAct: actIdx,
+      currentSubAct: 0,
+      monsters: [],
+      fogRevealedCells: [],
+    };
+    setGameState((prev) => ({ ...prev, ...update }));
+    syncToServer(update);
+  };
+
+  // ── Action 1 suite : Changer de sous-acte ────────────────────────────────
+
+  const changeSubAct = (subIdx: number) => {
+    const update: SessionSyncFields = {
+      currentSubAct: subIdx,
+      monsters: [],
+      fogRevealedCells: [],
+    };
+    setGameState((prev) => ({ ...prev, ...update }));
+    syncToServer(update);
+  };
+
+  // ── Action 2 : Modifier PV ────────────────────────────────────────────────
+
+  const updatePlayerHp = (playerId: string, delta: number) => {
+    const updatedPlayers = gameState.players.map((p) =>
+      p.id === playerId
+        ? { ...p, hp: Math.max(0, Math.min(p.maxHp, p.hp + delta)) }
+        : p
+    );
+    setGameState((prev) => ({ ...prev, players: updatedPlayers }));
+    syncToServer({ players: updatedPlayers });
+  };
+
+  const applyDamageInput = (playerId: string) => {
+    const val = parseInt(dmHpInputs[playerId] ?? "0", 10);
+    if (isNaN(val) || val === 0) return;
+    const updatedPlayers = gameState.players.map((p) =>
+      p.id === playerId ? { ...p, hp: Math.max(0, p.hp - val) } : p
+    );
+    setGameState((prev) => ({ ...prev, players: updatedPlayers }));
+    setDmHpInputs((prev) => ({ ...prev, [playerId]: "" }));
+    syncToServer({ players: updatedPlayers });
+  };
+
+  // ── Action 3 : Déplacer tokens ────────────────────────────────────────────
+
+  const handleMonstersUpdate = (monsters: Monster[]) => {
+    setGameState((prev) => ({ ...prev, monsters }));
+    syncToServer({ monsters });
+  };
+
+  // ── Action 4 : Brouillard de guerre ───────────────────────────────────────
+
+  const toggleFogCell = (col: number, row: number) => {
+    const key = `${col},${row}`;
+    const updated = gameState.fogRevealedCells.includes(key)
+      ? gameState.fogRevealedCells.filter((k) => k !== key)
+      : [...gameState.fogRevealedCells, key];
+    setGameState((prev) => ({ ...prev, fogRevealedCells: updated }));
+    syncToServer({ fogRevealedCells: updated });
+  };
+
+  const handleFogCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDM || !fogEditMode || !currentScene) return;
+    const canvas = fogCanvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const gs = currentScene.gridSize ?? 50;
+    const ox = currentScene.offsetX ?? 0;
+    const oy = currentScene.offsetY ?? 0;
+    const col = Math.floor((x - ox) / gs);
+    const row = Math.floor((y - oy) / gs);
+    toggleFogCell(col, row);
+  };
+
+  // ── Dessin du brouillard ──────────────────────────────────────────────────
+
+  useEffect(() => {
+    const canvas = fogCanvasRef.current;
+    const wrapper = fogWrapperRef.current;
+    if (!canvas || !wrapper || !currentScene) return;
+
+    canvas.width = wrapper.clientWidth;
+    canvas.height = wrapper.clientHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const gs = currentScene.gridSize ?? 50;
+    const ox = currentScene.offsetX ?? 0;
+    const oy = currentScene.offsetY ?? 0;
+    const cols = Math.ceil(canvas.width / gs) + 1;
+    const rows = Math.ceil(canvas.height / gs) + 1;
+
+    // Couleur du brouillard selon le rôle
+    ctx.fillStyle = isDM ? "rgba(0,0,0,0.35)" : "rgba(0,0,0,0.9)";
+
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        if (!gameState.fogRevealedCells.includes(`${c},${r}`)) {
+          ctx.fillRect(c * gs + ox, r * gs + oy, gs, gs);
+        }
+      }
+    }
+
+    // Grille de guidage en mode édition MJ
+    if (isDM && fogEditMode) {
+      ctx.strokeStyle = "rgba(245,158,11,0.25)";
+      ctx.lineWidth = 1;
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          ctx.strokeRect(c * gs + ox, r * gs + oy, gs, gs);
+        }
+      }
+    }
+  }, [gameState.fogRevealedCells, currentScene, fogEditMode, isDM]);
+
+  // ── Action 5 : Dés ───────────────────────────────────────────────────────
+
+  const rollDice = (d: number, secret: boolean) => {
+    const r = Math.floor(Math.random() * d) + 1;
+    const entry = secret ? `[SECRET] D${d} : ${r}` : `D${d} : ${r}`;
+    if (secret) {
+      // Local uniquement, pas syncé
+      setGameState((prev) => ({ ...prev, log: [entry, ...prev.log] }));
+    } else {
+      // Envoyé dans le log partagé
+      setGameState((prev) => {
+        const newLog = [entry, ...prev.log];
+        syncToServer({ log: newLog });
+        return { ...prev, log: newLog };
+      });
+    }
+  };
+
+  // Tokens : priorité aux positions live, fallback sur défauts campagne
+  const activeMonsters =
+    gameState.monsters.length > 0
+      ? gameState.monsters
+      : currentScene?.monsters ?? [];
+
+  // ── Rendu ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen bg-slate-950 text-white flex flex-col overflow-hidden">
-      {/* BARRE CONDUCTRICE MJ */}
+
+      {/* ── HEADER ─────────────────────────────────────────────────────────── */}
       <header className="h-16 border-b border-white/10 bg-slate-900/90 flex items-center px-6 gap-8 z-50">
         <div className="bg-amber-500 text-slate-950 px-4 py-1 rounded-full text-[10px] font-black uppercase">
           SESSION: {code}
@@ -86,28 +325,40 @@ export default function GameSession({
 
         {isDM && gameState.campaign && (
           <div className="flex gap-4 overflow-x-auto scrollbar-hide">
-            {gameState.campaign.acts.map((act: any, idx: number) => (
+            {gameState.campaign.acts.map((act, idx) => (
               <button
                 key={idx}
-                onClick={() =>
-                  setGameState({
-                    ...gameState,
-                    currentAct: idx,
-                    currentSubAct: 0,
-                  })
-                }
-                className={`text-[9px] font-black uppercase px-4 py-2 rounded-xl transition-all border ${gameState.currentAct === idx ? "border-amber-500 text-amber-500 bg-amber-500/5" : "border-white/5 text-slate-500"}`}
+                onClick={() => changeAct(idx)}
+                className={`text-[9px] font-black uppercase px-4 py-2 rounded-xl transition-all border ${
+                  gameState.currentAct === idx
+                    ? "border-amber-500 text-amber-500 bg-amber-500/5"
+                    : "border-white/5 text-slate-500"
+                }`}
               >
                 {act.title}
               </button>
             ))}
           </div>
         )}
+
+        {isDM && (
+          <button
+            onClick={() => setFogEditMode((f) => !f)}
+            className={`ml-auto text-[9px] font-black uppercase px-4 py-2 rounded-xl border transition-all ${
+              fogEditMode
+                ? "border-amber-500 text-amber-500 bg-amber-500/10"
+                : "border-white/10 text-slate-500 hover:border-amber-500/50"
+            }`}
+          >
+            {fogEditMode ? "Brouillard ON" : "Brouillard"}
+          </button>
+        )}
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* ASIDE GAUCHE : JOUEURS ET SCÈNES */}
-        <aside className="w-80 border-r border-white/5 bg-slate-900/50 flex flex-col p-6">
+
+        {/* ── ASIDE GAUCHE ───────────────────────────────────────────────── */}
+        <aside className="w-80 border-r border-white/5 bg-slate-900/50 flex flex-col p-6 overflow-y-auto">
           <section className="mb-10">
             <h3 className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-6">
               Aventuriers Connectés
@@ -116,7 +367,7 @@ export default function GameSession({
               {gameState.players.map((p) => (
                 <div
                   key={p.id}
-                  className="group relative bg-slate-950 p-4 rounded-2xl border border-white/5 hover:border-amber-500 transition-all cursor-pointer"
+                  className="group relative bg-slate-950 p-4 rounded-2xl border border-white/5 hover:border-amber-500 transition-all"
                 >
                   <div className="flex justify-between items-center">
                     <div>
@@ -135,26 +386,62 @@ export default function GameSession({
                     </div>
                   </div>
 
-                  {/* MINI FICHE AU HOVER */}
+                  {/* Contrôles PV — MJ uniquement */}
+                  {isDM && (
+                    <div className="mt-3 flex items-center gap-2">
+                      <button
+                        onClick={() => updatePlayerHp(p.id, -1)}
+                        className="w-7 h-7 rounded-lg bg-red-500/10 text-red-400 text-xs font-black hover:bg-red-500/30 transition-all"
+                      >
+                        −
+                      </button>
+                      <input
+                        type="number"
+                        placeholder="Dégâts"
+                        value={dmHpInputs[p.id] ?? ""}
+                        onChange={(e) =>
+                          setDmHpInputs((prev) => ({
+                            ...prev,
+                            [p.id]: e.target.value,
+                          }))
+                        }
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") applyDamageInput(p.id);
+                        }}
+                        className="flex-1 bg-slate-900 border border-white/10 rounded-lg px-2 py-1 text-[10px] text-white text-center focus:outline-none focus:border-amber-500"
+                      />
+                      <button
+                        onClick={() => applyDamageInput(p.id)}
+                        className="text-[8px] font-black text-amber-500 uppercase px-2 py-1 bg-amber-500/10 rounded-lg hover:bg-amber-500/30 transition-all"
+                      >
+                        OK
+                      </button>
+                      <button
+                        onClick={() => updatePlayerHp(p.id, 1)}
+                        className="w-7 h-7 rounded-lg bg-green-500/10 text-green-400 text-xs font-black hover:bg-green-500/30 transition-all"
+                      >
+                        +
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Mini fiche au hover */}
                   <div className="absolute left-full ml-4 top-0 w-64 bg-slate-900 border border-amber-500/30 p-4 rounded-2xl opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-[100] shadow-2xl">
                     <p className="text-[10px] font-black text-amber-500 uppercase mb-3">
                       Statistiques de {p.name}
                     </p>
                     <div className="grid grid-cols-3 gap-2">
-                      <div className="bg-slate-950 p-2 rounded-lg text-center text-[10px]">
-                        <p className="text-slate-500">FOR</p>{" "}
-                        <p className="font-black">{p.str}</p>
-                      </div>
-                      <div className="bg-slate-950 p-2 rounded-lg text-center text-[10px]">
-                        <p className="text-slate-500">DEX</p>{" "}
-                        <p className="font-black">{p.dex}</p>
-                      </div>
-                      <div className="bg-slate-950 p-2 rounded-lg text-center text-[10px]">
-                        <p className="text-slate-500">CON</p>{" "}
-                        <p className="font-black">{p.con}</p>
-                      </div>
+                      {(["str", "dex", "con"] as const).map((stat) => (
+                        <div
+                          key={stat}
+                          className="bg-slate-950 p-2 rounded-lg text-center text-[10px]"
+                        >
+                          <p className="text-slate-500 uppercase">{stat}</p>
+                          <p className="font-black">{p[stat] ?? "—"}</p>
+                        </div>
+                      ))}
                     </div>
-                    <button className="w-full mt-4 py-2 bg-amber-500/10 text-amber-500 rounded-lg text-[9px] font-black uppercase hover:bg-amber-500 hover:text-slate-950">
+                    <button className="w-full mt-4 py-2 bg-amber-500/10 text-amber-500 rounded-lg text-[9px] font-black uppercase hover:bg-amber-500 hover:text-slate-950 transition-all">
                       Voir fiche complète
                     </button>
                   </div>
@@ -164,45 +451,62 @@ export default function GameSession({
           </section>
 
           {isDM && gameState.campaign && (
-            <section className="flex-1 overflow-y-auto">
+            <section className="flex-1">
               <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-6 italic">
                 Déroulement de l'Acte
               </h3>
               <div className="space-y-2 border-l border-white/10 ml-2">
-                {gameState.campaign.acts[gameState.currentAct].subActs.map(
-                  (sub: any, idx: number) => (
+                {gameState.campaign.acts[gameState.currentAct]?.subActs.map(
+                  (sub, idx) => (
                     <button
                       key={idx}
-                      onClick={() =>
-                        setGameState({ ...gameState, currentSubAct: idx })
-                      }
-                      className={`block w-full text-left pl-6 py-2 text-[10px] font-bold uppercase relative transition-all ${gameState.currentSubAct === idx ? "text-amber-500" : "text-slate-500"}`}
+                      onClick={() => changeSubAct(idx)}
+                      className={`block w-full text-left pl-6 py-2 text-[10px] font-bold uppercase relative transition-all ${
+                        gameState.currentSubAct === idx
+                          ? "text-amber-500"
+                          : "text-slate-500"
+                      }`}
                     >
                       <div
-                        className={`absolute left-[-5px] top-1/2 -translate-y-1/2 w-2 h-2 rounded-full ${gameState.currentSubAct === idx ? "bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]" : "bg-slate-800"}`}
+                        className={`absolute left-[-5px] top-1/2 -translate-y-1/2 w-2 h-2 rounded-full ${
+                          gameState.currentSubAct === idx
+                            ? "bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]"
+                            : "bg-slate-800"
+                        }`}
                       />
                       {sub.title}
                     </button>
-                  ),
+                  )
                 )}
               </div>
             </section>
           )}
         </aside>
 
-        {/* CENTRE : MAP */}
+        {/* ── CENTRE : MAP ────────────────────────────────────────────────── */}
         <section className="flex-1 bg-black relative flex items-center justify-center p-10 overflow-auto scrollbar-hide">
           {currentScene?.mapUrl ? (
-            <BattleGrid
-              mapUrl={currentScene.mapUrl}
-              gridSize={currentScene.gridSize}
-              gridType={currentScene.gridType as any}
-              offsetX={currentScene.offsetX}
-              offsetY={currentScene.offsetY}
-              opacity={currentScene.opacity}
-              monsters={currentScene.monsters}
-              onUpdateMonsters={(m) => {}} // À synchroniser plus tard
-            />
+            <div ref={fogWrapperRef} className="relative inline-block">
+              <BattleGrid
+                mapUrl={currentScene.mapUrl}
+                gridSize={currentScene.gridSize ?? 50}
+                gridType={(currentScene.gridType as "square" | "hex" | "none") ?? "square"}
+                offsetX={currentScene.offsetX ?? 0}
+                offsetY={currentScene.offsetY ?? 0}
+                opacity={currentScene.opacity ?? 0.3}
+                monsters={activeMonsters}
+                onUpdateMonsters={isDM ? handleMonstersUpdate : undefined}
+              />
+              <canvas
+                ref={fogCanvasRef}
+                onClick={handleFogCanvasClick}
+                className="absolute inset-0 w-full h-full"
+                style={{
+                  pointerEvents: isDM && fogEditMode ? "auto" : "none",
+                  cursor: isDM && fogEditMode ? "crosshair" : "default",
+                }}
+              />
+            </div>
           ) : (
             <div className="text-slate-800 font-black uppercase tracking-[2em] text-center select-none">
               Pas de map active
@@ -210,7 +514,7 @@ export default function GameSession({
           )}
         </section>
 
-        {/* DROITE : LOG & DÉS */}
+        {/* ── ASIDE DROITE : LOG & DÉS ───────────────────────────────────── */}
         <aside className="w-72 border-l border-white/5 bg-slate-900/50 flex flex-col">
           <div className="flex-1 p-6 overflow-y-auto space-y-3">
             <h3 className="text-[9px] font-black text-slate-600 uppercase tracking-widest mb-4">
@@ -219,30 +523,56 @@ export default function GameSession({
             {gameState.log.map((l, i) => (
               <p
                 key={i}
-                className="text-[10px] text-slate-400 leading-relaxed border-l border-amber-500/20 pl-3"
+                className={`text-[10px] leading-relaxed border-l pl-3 ${
+                  l.startsWith("[SECRET]")
+                    ? "text-amber-500/60 border-amber-500/40 italic"
+                    : "text-slate-400 border-amber-500/20"
+                }`}
               >
                 {l}
               </p>
             ))}
           </div>
-          <div className="p-6 bg-slate-950 border-t border-white/5 grid grid-cols-3 gap-2">
-            {[4, 6, 8, 10, 12, 20].map((d) => (
-              <button
-                key={d}
-                onClick={() => {
-                  const r = Math.floor(Math.random() * d) + 1;
-                  setGameState((p) => ({
-                    ...p,
-                    log: [`D${d} : Résultat ${r}`, ...p.log],
-                  }));
-                }}
-                className="bg-slate-900 border border-white/5 rounded-xl aspect-square flex items-center justify-center text-[10px] font-black hover:border-amber-500 hover:text-amber-500 transition-all"
-              >
-                D{d}
-              </button>
-            ))}
+
+          {/* Dés partagés */}
+          <div className="p-4 bg-slate-950 border-t border-white/5">
+            <p className="text-[9px] font-black text-slate-600 uppercase tracking-widest mb-3">
+              {isDM ? "Dés publics" : "Dés partagés"}
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {[4, 6, 8, 10, 12, 20].map((d) => (
+                <button
+                  key={d}
+                  onClick={() => rollDice(d, false)}
+                  className="bg-slate-900 border border-white/5 rounded-xl aspect-square flex items-center justify-center text-[10px] font-black hover:border-amber-500 hover:text-amber-500 transition-all"
+                >
+                  D{d}
+                </button>
+              ))}
+            </div>
           </div>
+
+          {/* Dés secrets MJ */}
+          {isDM && (
+            <div className="p-4 bg-slate-950 border-t border-amber-500/10">
+              <p className="text-[9px] font-black text-amber-500/50 uppercase tracking-widest mb-3">
+                Dés secrets MJ
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                {[4, 6, 8, 10, 12, 20].map((d) => (
+                  <button
+                    key={d}
+                    onClick={() => rollDice(d, true)}
+                    className="bg-slate-900 border border-amber-500/20 rounded-xl aspect-square flex items-center justify-center text-[10px] font-black hover:border-amber-500 hover:text-amber-500 transition-all"
+                  >
+                    D{d}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </aside>
+
       </div>
     </div>
   );
