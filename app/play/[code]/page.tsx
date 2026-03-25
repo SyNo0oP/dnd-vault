@@ -11,54 +11,31 @@ export default function GameSession({
   const { code } = React.use(params);
   const searchParams = useSearchParams();
   const role = searchParams.get("role");
-  const campaignId = searchParams.get("campaignId");
   const isDM = role === "dm";
 
   const [gameState, setGameState] = useState({
     currentAct: 0,
     currentSubAct: 0,
     campaign: null as any,
-    players: [
-      {
-        id: "1",
-        name: "Valeros",
-        class: "Guerrier",
-        hp: 18,
-        maxHp: 22,
-        ac: 16,
-        x: 100,
-        y: 100,
-        str: 16,
-        dex: 12,
-        con: 14,
-      },
-      {
-        id: "2",
-        name: "Lini",
-        class: "Druide",
-        hp: 14,
-        maxHp: 14,
-        ac: 13,
-        x: 150,
-        y: 150,
-        str: 8,
-        dex: 14,
-        con: 12,
-      },
-    ],
+    players: [] as any[],
     log: ["La session commence..."],
   });
 
   useEffect(() => {
-    if (campaignId) {
-      const saved = localStorage.getItem("dnd_vault_campaigns");
-      if (saved) {
-        const campaigns = JSON.parse(saved);
-        const found = campaigns.find((c: any) => c.id === campaignId);
-        if (found) setGameState((prev) => ({ ...prev, campaign: found }));
-      }
-    }
-  }, [campaignId]);
+    fetch(`/api/sessions?code=${code}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.session && data.campaign) {
+          setGameState((prev) => ({
+            ...prev,
+            campaign: data.campaign,
+            currentAct: data.session.currentAct ?? 0,
+            currentSubAct: data.session.currentSubAct ?? 0,
+          }));
+        }
+      })
+      .catch((err) => console.error("Erreur chargement session:", err));
+  }, [code]);
 
   const currentScene =
     gameState.campaign?.acts[gameState.currentAct]?.subActs[
