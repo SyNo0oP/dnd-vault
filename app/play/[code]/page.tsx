@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
+import { useSession } from "next-auth/react";
 import BattleGrid from "@/app/components/BattleGrid";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -8,6 +9,7 @@ import BattleGrid from "@/app/components/BattleGrid";
 interface Player {
   id: string;
   name: string;
+  email?: string;
   class: string;
   hp: number;
   maxHp: number;
@@ -23,6 +25,8 @@ interface Monster {
   name: string;
   x: number;
   y: number;
+  hp?: number;
+  maxHp?: number;
 }
 
 interface SubAct {
@@ -74,6 +78,8 @@ export default function GameSession({
   const { code } = React.use(params);
   const searchParams = useSearchParams();
   const isDM = searchParams.get("role") === "dm";
+  const { data: authSession } = useSession();
+  const hasRegistered = useRef(false);
 
   const [gameState, setGameState] = useState<GameState>({
     currentAct: 0,
@@ -87,8 +93,10 @@ export default function GameSession({
 
   const [dmHpInputs, setDmHpInputs] = useState<Record<string, string>>({});
   const [fogEditMode, setFogEditMode] = useState(false);
+  const [hoveredPlayerId, setHoveredPlayerId] = useState<string | null>(null);
   const fogCanvasRef = useRef<HTMLCanvasElement>(null);
   const fogWrapperRef = useRef<HTMLDivElement>(null);
+  const hoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Déclaré tôt pour être accessible dans les hooks
   const currentScene =
@@ -146,6 +154,43 @@ export default function GameSession({
     }, 2000);
     return () => clearInterval(poll);
   }, [code, isDM]);
+
+  // ── Auto-inscription joueur ───────────────────────────────────────────────
+
+  useEffect(() => {
+    if (isDM || !authSession?.user?.email || hasRegistered.current) return;
+    if (gameState.campaign === null) return; // attendre le chargement initial
+
+    const email = authSession.user.email;
+    const alreadyIn = gameState.players.some((p) => p.id === email);
+
+    if (alreadyIn) {
+      hasRegistered.current = true;
+      return;
+    }
+
+    hasRegistered.current = true;
+
+    const newPlayer: Player = {
+      id: email,
+      email,
+      name: authSession.user.name ?? "Aventurier",
+      class: "Aventurier",
+      hp: 20,
+      maxHp: 20,
+      ac: 10,
+      x: 0,
+      y: 0,
+    };
+
+    fetch("/api/sessions", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code, newPlayer }),
+    }).then(() => {
+      setGameState((prev) => ({ ...prev, players: [...prev.players, newPlayer] }));
+    }).catch((e) => console.error("Erreur inscription joueur:", e));
+  }, [code, isDM, authSession, gameState.campaign, gameState.players]);
 
   // ── syncToServer ──────────────────────────────────────────────────────────
 
@@ -210,6 +255,18 @@ export default function GameSession({
     setGameState((prev) => ({ ...prev, players: updatedPlayers }));
     setDmHpInputs((prev) => ({ ...prev, [playerId]: "" }));
     syncToServer({ players: updatedPlayers });
+  };
+
+  // ── Action 2b : Modifier PV monstre ──────────────────────────────────────
+
+  const updateMonsterHp = (idx: number, delta: number) => {
+    const updated = activeMonsters.map((m, i) => {
+      if (i !== idx) return m;
+      const newHp = Math.max(0, (m.hp ?? 0) + delta);
+      return { ...m, hp: m.maxHp !== undefined ? Math.min(m.maxHp, newHp) : newHp };
+    });
+    setGameState((prev) => ({ ...prev, monsters: updated }));
+    syncToServer({ monsters: updated });
   };
 
   // ── Action 3 : Déplacer tokens ────────────────────────────────────────────
@@ -367,7 +424,14 @@ export default function GameSession({
               {gameState.players.map((p) => (
                 <div
                   key={p.id}
-                  className="group relative bg-slate-950 p-4 rounded-2xl border border-white/5 hover:border-amber-500 transition-all"
+                  onMouseEnter={() => {
+                    if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
+                    setHoveredPlayerId(p.id);
+                  }}
+                  onMouseLeave={() => {
+                    hoverTimeout.current = setTimeout(() => setHoveredPlayerId(null), 300);
+                  }}
+                  className="relative bg-slate-950 p-4 rounded-2xl border border-white/5 hover:border-amber-500 transition-all"
                 >
                   <div className="flex justify-between items-center">
                     <div>
@@ -388,6 +452,19 @@ export default function GameSession({
 
                   {/* Contrôles PV — MJ uniquement */}
                   {isDM && (
+                    <>
+                    <div className="mt-2 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${
+                          p.maxHp > 0 && p.hp / p.maxHp < 0.25
+                            ? "bg-red-500"
+                            : p.maxHp > 0 && p.hp / p.maxHp < 0.5
+                            ? "bg-yellow-500"
+                            : "bg-green-500"
+                        }`}
+                        style={{ width: `${p.maxHp > 0 ? Math.max(0, (p.hp / p.maxHp) * 100) : 0}%` }}
+                      />
+                    </div>
                     <div className="mt-3 flex items-center gap-2">
                       <button
                         onClick={() => updatePlayerHp(p.id, -1)}
@@ -423,10 +500,21 @@ export default function GameSession({
                         +
                       </button>
                     </div>
+                    </>
                   )}
 
                   {/* Mini fiche au hover */}
-                  <div className="absolute left-full ml-4 top-0 w-64 bg-slate-900 border border-amber-500/30 p-4 rounded-2xl opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-[100] shadow-2xl">
+                  <div
+                    onMouseEnter={() => {
+                      if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
+                    }}
+                    onMouseLeave={() => {
+                      hoverTimeout.current = setTimeout(() => setHoveredPlayerId(null), 300);
+                    }}
+                    className={`absolute left-full ml-4 top-0 w-64 bg-slate-900 border border-amber-500/30 p-4 rounded-2xl transition-opacity z-[999] shadow-2xl ${
+                      hoveredPlayerId === p.id ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+                    }`}
+                  >
                     <p className="text-[10px] font-black text-amber-500 uppercase mb-3">
                       Statistiques de {p.name}
                     </p>
