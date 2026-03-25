@@ -51,8 +51,13 @@ export default function MapConfigModal({
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (mapUrl.startsWith("blob:")) URL.revokeObjectURL(mapUrl);
-      setMapUrl(URL.createObjectURL(file));
+      if (file.size > 10 * 1024 * 1024) {
+        alert("Image trop lourde, compresse-la avant upload (max ~10 Mo)");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => setMapUrl(reader.result as string);
+      reader.readAsDataURL(file);
     }
   };
 
