@@ -54,6 +54,10 @@ export async function POST(req: Request) {
       status: status ?? "active",
       currentAct: currentAct ?? 0,
       currentSubAct: currentSubAct ?? 0,
+      monsters: [],
+      fogRevealedCells: [],
+      players: [],
+      log: ["La session commence..."],
       createdAt: new Date(),
     });
 
@@ -105,7 +109,15 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
 
-    const { code, currentAct, currentSubAct } = await req.json();
+    const {
+      code,
+      currentAct,
+      currentSubAct,
+      monsters,
+      fogRevealedCells,
+      players,
+      log,
+    } = await req.json();
 
     if (!code) {
       return NextResponse.json({ error: "code requis" }, { status: 400 });
@@ -128,9 +140,13 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: "Interdit" }, { status: 403 });
     }
 
-    const updateFields: Record<string, number> = {};
+    const updateFields: Record<string, unknown> = {};
     if (currentAct !== undefined) updateFields.currentAct = currentAct;
     if (currentSubAct !== undefined) updateFields.currentSubAct = currentSubAct;
+    if (monsters !== undefined) updateFields.monsters = monsters;
+    if (fogRevealedCells !== undefined) updateFields.fogRevealedCells = fogRevealedCells;
+    if (players !== undefined) updateFields.players = players;
+    if (log !== undefined) updateFields.log = log;
 
     await db
       .collection("sessions")
