@@ -26,6 +26,7 @@ interface GridProps {
   onUpdateMonsters?: (monsters: Monster[]) => void;
   playerTokens?: PlayerToken[];
   onUpdatePlayerTokens?: (players: PlayerToken[]) => void;
+  isDM?: boolean;
 }
 
 export default function BattleGrid({
@@ -40,6 +41,7 @@ export default function BattleGrid({
   onUpdateMonsters,
   playerTokens = [],
   onUpdatePlayerTokens,
+  isDM = false,
 }: GridProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);

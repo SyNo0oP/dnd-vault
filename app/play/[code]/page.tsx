@@ -584,6 +584,16 @@ export default function GameSession({
                 opacity={currentScene.opacity ?? 0.3}
                 monsters={activeMonsters}
                 onUpdateMonsters={isDM ? handleMonstersUpdate : undefined}
+                playerTokens={gameState.players}
+                onUpdatePlayerTokens={(updatedTokens) => {
+                  const updatedPlayers = gameState.players.map((p) => {
+                    const token = updatedTokens.find((t) => t.id === p.id);
+                    return token ? { ...p, x: token.x, y: token.y } : p;
+                  });
+                  setGameState((prev) => ({ ...prev, players: updatedPlayers }));
+                  syncToServer({ players: updatedPlayers });
+                }}
+                isDM={isDM}
               />
               <canvas
                 ref={fogCanvasRef}
