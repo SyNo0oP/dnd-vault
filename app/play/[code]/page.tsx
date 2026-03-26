@@ -626,7 +626,7 @@ export default function GameSession({
                 offsetX={currentScene.offsetX ?? 0}
                 offsetY={currentScene.offsetY ?? 0}
                 opacity={currentScene.opacity ?? 0.3}
-                hasFog={currentScene.hasFog ?? false}
+                hasFog={gameState.fogRevealedCells.length > 0 || (currentScene.hasFog ?? false)}
                 monsters={activeMonsters}
                 onUpdateMonsters={isDM ? handleMonstersUpdate : undefined}
                 fogRevealedCells={gameState.fogRevealedCells.map((cell) => {
