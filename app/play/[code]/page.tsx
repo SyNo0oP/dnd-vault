@@ -95,6 +95,7 @@ export default function GameSession({
   const [dmHpInputs, setDmHpInputs] = useState<Record<string, string>>({});
   const [fogEditMode, setFogEditMode] = useState(false);
   const [hoveredPlayerId, setHoveredPlayerId] = useState<string | null>(null);
+  const [hoverPos, setHoverPos] = useState<{ top: number; left: number } | null>(null);
   const fogCanvasRef = useRef<HTMLCanvasElement>(null);
   const fogWrapperRef = useRef<HTMLDivElement>(null);
   const hoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -436,14 +437,16 @@ export default function GameSession({
               {gameState.players.map((p) => (
                 <div
                   key={p.id}
-                  onMouseEnter={() => {
+                  onMouseEnter={(e) => {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    setHoverPos({ top: rect.top, left: rect.right + 16 });
                     if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
                     setHoveredPlayerId(p.id);
                   }}
                   onMouseLeave={() => {
                     hoverTimeout.current = setTimeout(() => setHoveredPlayerId(null), 300);
                   }}
-                  className="relative bg-slate-950 p-4 rounded-2xl border border-white/5 hover:border-amber-500 transition-all"
+                  className="bg-slate-950 p-4 rounded-2xl border border-white/5 hover:border-amber-500 transition-all"
                 >
                   <div className="flex justify-between items-center">
                     <div>
@@ -477,27 +480,6 @@ export default function GameSession({
                     />
                     <button onClick={() => applyDamageInput(p.id)} className="text-[8px] font-black text-amber-500 uppercase px-2 py-1 bg-amber-500/10 rounded-lg hover:bg-amber-500/30 transition-all">OK</button>
                     <button onClick={() => updatePlayerHp(p.id, 1)} className="w-7 h-7 rounded-lg bg-green-500/10 text-green-400 text-xs font-black hover:bg-green-500/30 transition-all">+</button>
-                  </div>
-                  {/* Mini fiche au hover */}
-                  <div
-                    onMouseEnter={() => { if (hoverTimeout.current) clearTimeout(hoverTimeout.current); }}
-                    onMouseLeave={() => { hoverTimeout.current = setTimeout(() => setHoveredPlayerId(null), 300); }}
-                    className={`absolute left-full ml-4 top-0 w-64 bg-slate-900 border border-amber-500/30 p-4 rounded-2xl transition-opacity z-[999] shadow-2xl ${
-                      hoveredPlayerId === p.id ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
-                    }`}
-                  >
-                    <p className="text-[10px] font-black text-amber-500 uppercase mb-3">Statistiques de {p.name}</p>
-                    <div className="grid grid-cols-3 gap-2">
-                      {(["str", "dex", "con"] as const).map((stat) => (
-                        <div key={stat} className="bg-slate-950 p-2 rounded-lg text-center text-[10px]">
-                          <p className="text-slate-500 uppercase">{stat}</p>
-                          <p className="font-black">{p[stat] ?? "—"}</p>
-                        </div>
-                      ))}
-                    </div>
-                    <button className="w-full mt-4 py-2 bg-amber-500/10 text-amber-500 rounded-lg text-[9px] font-black uppercase hover:bg-amber-500 hover:text-slate-950 transition-all">
-                      Voir fiche complète
-                    </button>
                   </div>
                 </div>
               ))}
@@ -739,6 +721,35 @@ export default function GameSession({
         </aside>
 
       </div>
+
+      {/* ── MINI FICHE JOUEUR (portail fixe, hors aside) ────────────────── */}
+      {hoveredPlayerId !== null && hoverPos !== null && (() => {
+        const p = gameState.players.find((pl) => pl.id === hoveredPlayerId);
+        if (!p) return null;
+        return (
+          <div
+            onMouseEnter={() => { if (hoverTimeout.current) clearTimeout(hoverTimeout.current); }}
+            onMouseLeave={() => { hoverTimeout.current = setTimeout(() => setHoveredPlayerId(null), 300); }}
+            style={{ position: "fixed", top: hoverPos.top, left: hoverPos.left, zIndex: 9999 }}
+            className="w-64 bg-slate-900 border border-amber-500/30 p-4 rounded-2xl shadow-2xl"
+          >
+            <p className="text-[10px] font-black text-amber-500 uppercase mb-3">
+              Statistiques de {p.name}
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {(["str", "dex", "con"] as const).map((stat) => (
+                <div key={stat} className="bg-slate-950 p-2 rounded-lg text-center text-[10px]">
+                  <p className="text-slate-500 uppercase">{stat}</p>
+                  <p className="font-black">{p[stat] ?? "—"}</p>
+                </div>
+              ))}
+            </div>
+            <button className="w-full mt-4 py-2 bg-amber-500/10 text-amber-500 rounded-lg text-[9px] font-black uppercase hover:bg-amber-500 hover:text-slate-950 transition-all">
+              Voir fiche complète
+            </button>
+          </div>
+        );
+      })()}
     </div>
   );
 }
