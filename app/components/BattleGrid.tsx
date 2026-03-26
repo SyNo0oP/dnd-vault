@@ -27,6 +27,7 @@ interface GridProps {
   playerTokens?: PlayerToken[];
   onUpdatePlayerTokens?: (players: PlayerToken[]) => void;
   isDM?: boolean;
+  fogRevealedCells?: { x: number; y: number }[];
 }
 
 export default function BattleGrid({
@@ -36,12 +37,13 @@ export default function BattleGrid({
   opacity,
   offsetX,
   offsetY,
-  hasFog,
+  hasFog = false,
   monsters = [],
   onUpdateMonsters,
   playerTokens = [],
   onUpdatePlayerTokens,
   isDM = false,
+  fogRevealedCells = [],
 }: GridProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -152,6 +154,15 @@ export default function BattleGrid({
 
       {monsters.map((monster, i) => {
         const tokenSize = gridSize * 0.7;
+        const monsterCellX = Math.floor((monster.x - offsetX) / gridSize);
+        const monsterCellY = Math.floor((monster.y - offsetY) / gridSize);
+        const isRevealed =
+          !hasFog ||
+          isDM ||
+          fogRevealedCells.some(
+            (cell) => cell.x === monsterCellX && cell.y === monsterCellY
+          );
+        if (!isRevealed) return null;
         return (
           <div
             key={`m-${i}`}

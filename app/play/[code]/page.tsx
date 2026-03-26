@@ -37,6 +37,7 @@ interface SubAct {
   offsetX?: number;
   offsetY?: number;
   opacity?: number;
+  hasFog?: boolean;
   monsters?: Monster[];
 }
 
@@ -626,8 +627,13 @@ export default function GameSession({
                 offsetX={currentScene.offsetX ?? 0}
                 offsetY={currentScene.offsetY ?? 0}
                 opacity={currentScene.opacity ?? 0.3}
+                hasFog={currentScene.hasFog ?? false}
                 monsters={activeMonsters}
                 onUpdateMonsters={isDM ? handleMonstersUpdate : undefined}
+                fogRevealedCells={gameState.fogRevealedCells.map((cell) => {
+                  const [x, y] = cell.split(",").map(Number);
+                  return { x, y };
+                })}
                 playerTokens={gameState.players}
                 onUpdatePlayerTokens={(updatedTokens) => {
                   const updatedPlayers = gameState.players.map((p) => {
