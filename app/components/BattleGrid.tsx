@@ -7,6 +7,13 @@ interface Monster {
   y: number;
 }
 
+interface PlayerToken {
+  id: string;
+  name: string;
+  x: number;
+  y: number;
+}
+
 interface GridProps {
   mapUrl: string;
   gridType: "square" | "hex" | "none";
@@ -17,6 +24,8 @@ interface GridProps {
   hasFog?: boolean;
   monsters?: Monster[];
   onUpdateMonsters?: (monsters: Monster[]) => void;
+  playerTokens?: PlayerToken[];
+  onUpdatePlayerTokens?: (players: PlayerToken[]) => void;
 }
 
 export default function BattleGrid({
@@ -29,6 +38,8 @@ export default function BattleGrid({
   hasFog,
   monsters = [],
   onUpdateMonsters,
+  playerTokens = [],
+  onUpdatePlayerTokens,
 }: GridProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -84,47 +95,39 @@ export default function BattleGrid({
     drawGrid();
   }, [gridType, gridSize, opacity, offsetX, offsetY, mapUrl]);
 
-  const handleDragEnd = (e: React.DragEvent, index: number) => {
-    if (!imgRef.current || !onUpdateMonsters) return;
-
-    const rect = imgRef.current.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-
-    let snapX, snapY;
-
+  const snapToGrid = (mouseX: number, mouseY: number) => {
     if (gridType === "square") {
-      snapX =
-        Math.floor((mouseX - offsetX) / gridSize) * gridSize +
-        offsetX +
-        gridSize / 2;
-      snapY =
-        Math.floor((mouseY - offsetY) / gridSize) * gridSize +
-        offsetY +
-        gridSize / 2;
+      const snapX = Math.floor((mouseX - offsetX) / gridSize) * gridSize + offsetX + gridSize / 2;
+      const snapY = Math.floor((mouseY - offsetY) / gridSize) * gridSize + offsetY + gridSize / 2;
+      return { snapX, snapY };
     } else {
-      // MATHS HEXAGONE (Pointy Topped)
       const r = gridSize / 2;
       const hDist = Math.sqrt(3) * r;
       const vDist = r * 1.5;
-
       const row = Math.round((mouseY - offsetY) / vDist);
-      const col = Math.round(
-        (mouseX - offsetX - (row % 2 === 0 ? 0 : hDist / 2)) / hDist,
-      );
-
-      snapX = col * hDist + (row % 2 === 0 ? 0 : hDist / 2) + offsetX;
-      snapY = row * vDist + offsetY;
+      const col = Math.round((mouseX - offsetX - (row % 2 === 0 ? 0 : hDist / 2)) / hDist);
+      return { snapX: col * hDist + (row % 2 === 0 ? 0 : hDist / 2) + offsetX, snapY: row * vDist + offsetY };
     }
+  };
 
+  const handleDragEnd = (e: React.DragEvent, index: number) => {
+    if (!imgRef.current || !onUpdateMonsters) return;
+    const rect = imgRef.current.getBoundingClientRect();
+    const { snapX, snapY } = snapToGrid(e.clientX - rect.left, e.clientY - rect.top);
     const tokenSize = gridSize * 0.7;
     const updatedMonsters = [...monsters];
-    updatedMonsters[index] = {
-      ...updatedMonsters[index],
-      x: snapX - tokenSize / 2,
-      y: snapY - tokenSize / 2,
-    };
+    updatedMonsters[index] = { ...updatedMonsters[index], x: snapX - tokenSize / 2, y: snapY - tokenSize / 2 };
     onUpdateMonsters(updatedMonsters);
+  };
+
+  const handlePlayerDragEnd = (e: React.DragEvent, index: number) => {
+    if (!imgRef.current || !onUpdatePlayerTokens) return;
+    const rect = imgRef.current.getBoundingClientRect();
+    const { snapX, snapY } = snapToGrid(e.clientX - rect.left, e.clientY - rect.top);
+    const tokenSize = gridSize * 0.7;
+    const updated = [...playerTokens];
+    updated[index] = { ...updated[index], x: snapX - tokenSize / 2, y: snapY - tokenSize / 2 };
+    onUpdatePlayerTokens(updated);
   };
 
   return (
@@ -149,21 +152,34 @@ export default function BattleGrid({
         const tokenSize = gridSize * 0.7;
         return (
           <div
-            key={i}
+            key={`m-${i}`}
             draggable
             onDragEnd={(e) => handleDragEnd(e, i)}
             className="absolute z-50 cursor-grab active:cursor-grabbing group"
-            style={{
-              left: `${monster.x}px`,
-              top: `${monster.y}px`,
-              width: `${tokenSize}px`,
-              height: `${tokenSize}px`,
-              transition: "left 0.1s, top 0.1s", // Petite fluidité de placement
-            }}
+            style={{ left: `${monster.x}px`, top: `${monster.y}px`, width: `${tokenSize}px`, height: `${tokenSize}px`, transition: "left 0.1s, top 0.1s" }}
           >
             <div className="w-full h-full rounded-full border-2 border-amber-500 bg-slate-800 shadow-xl flex items-center justify-center overflow-hidden transition-transform group-hover:scale-110">
               <span className="text-[8px] font-black text-white uppercase px-1 pointer-events-none">
                 {monster.name.substring(0, 3)}
+              </span>
+            </div>
+          </div>
+        );
+      })}
+
+      {playerTokens.map((player, i) => {
+        const tokenSize = gridSize * 0.7;
+        return (
+          <div
+            key={`p-${player.id}`}
+            draggable
+            onDragEnd={(e) => handlePlayerDragEnd(e, i)}
+            className="absolute z-50 cursor-grab active:cursor-grabbing group"
+            style={{ left: `${player.x}px`, top: `${player.y}px`, width: `${tokenSize}px`, height: `${tokenSize}px`, transition: "left 0.1s, top 0.1s" }}
+          >
+            <div className="w-full h-full rounded-full border-2 border-blue-500 bg-slate-800 shadow-xl flex items-center justify-center overflow-hidden transition-transform group-hover:scale-110">
+              <span className="text-[8px] font-black text-blue-300 uppercase px-1 pointer-events-none">
+                {player.name.substring(0, 3)}
               </span>
             </div>
           </div>

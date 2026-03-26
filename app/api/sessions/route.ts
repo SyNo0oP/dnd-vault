@@ -117,6 +117,7 @@ export async function PUT(req: Request) {
       fogRevealedCells,
       players,
       log,
+      newPlayer,
     } = await req.json();
 
     if (!code) {
@@ -126,7 +127,31 @@ export async function PUT(req: Request) {
     const client = await clientPromise;
     const db = client.db("dnd-vault");
 
-    // Vérifie que l'appelant est bien le MJ de cette session
+    // ── Cas spécial : un joueur rejoint la session ────────────────────────────
+    if (newPlayer) {
+      // Sécurité : un joueur ne peut s'ajouter que lui-même
+      if (newPlayer.id !== authSession.user.email) {
+        return NextResponse.json({ error: "Interdit" }, { status: 403 });
+      }
+
+      const sessionDoc = await db.collection("sessions").findOne({ code });
+      if (!sessionDoc) {
+        return NextResponse.json({ error: "Session introuvable" }, { status: 404 });
+      }
+
+      const alreadyIn = sessionDoc.players?.some((p: { id: string }) => p.id === newPlayer.id);
+      if (alreadyIn) {
+        return NextResponse.json({ success: true, message: "Déjà inscrit" });
+      }
+
+      await db.collection("sessions").updateOne(
+        { code },
+        { $push: { players: newPlayer } }
+      );
+      return NextResponse.json({ success: true });
+    }
+
+    // ── Mise à jour MJ (champs de session) ───────────────────────────────────
     const session = await db.collection("sessions").findOne({ code });
 
     if (!session) {
