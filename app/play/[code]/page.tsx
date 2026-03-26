@@ -170,8 +170,6 @@ export default function GameSession({
       return;
     }
 
-    hasRegistered.current = true;
-
     const newPlayer: Player = {
       id: email,
       email,
@@ -188,8 +186,11 @@ export default function GameSession({
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ code, newPlayer }),
-    }).then(() => {
-      setGameState((prev) => ({ ...prev, players: [...prev.players, newPlayer] }));
+    }).then((res) => {
+      if (res.ok) {
+        hasRegistered.current = true;
+        setGameState((prev) => ({ ...prev, players: [...prev.players, newPlayer] }));
+      }
     }).catch((e) => console.error("Erreur inscription joueur:", e));
   }, [code, isDM, authSession, gameState.campaign, gameState.players]);
 
