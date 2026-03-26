@@ -260,10 +260,12 @@ export default function GameSession({
   // ── Action 2b : Modifier PV monstre ──────────────────────────────────────
 
   const updateMonsterHp = (idx: number, delta: number) => {
+    // Initialise maxHp pour tous les monstres au premier appel
     const updated = activeMonsters.map((m, i) => {
-      if (i !== idx) return m;
-      const newHp = Math.max(0, (m.hp ?? 0) + delta);
-      return { ...m, hp: m.maxHp !== undefined ? Math.min(m.maxHp, newHp) : newHp };
+      const maxHp = m.maxHp ?? m.hp ?? 10;
+      if (i !== idx) return { ...m, maxHp };
+      const newHp = Math.max(0, Math.min(maxHp, (m.hp ?? maxHp) + delta));
+      return { ...m, hp: newHp, maxHp };
     });
     setGameState((prev) => ({ ...prev, monsters: updated }));
     syncToServer({ monsters: updated });
@@ -566,6 +568,48 @@ export default function GameSession({
                     </button>
                   )
                 )}
+              </div>
+            </section>
+          )}
+
+          {isDM && activeMonsters.length > 0 && (
+            <section className="mt-6">
+              <h3 className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-4">
+                Monstres
+              </h3>
+              <div className="space-y-2">
+                {activeMonsters.map((m, idx) => (
+                  <div key={idx} className="bg-slate-950 p-3 rounded-xl border border-white/5">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-xs font-bold text-white">{m.name}</span>
+                      <span className="text-xs text-amber-500 font-black">
+                        {m.hp ?? "?"} PV
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => updateMonsterHp(idx, -1)}
+                        className="w-6 h-6 bg-red-900/50 hover:bg-red-600 rounded text-white text-xs font-black transition-colors"
+                      >
+                        −
+                      </button>
+                      <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-red-500 rounded-full transition-all"
+                          style={{
+                            width: `${Math.max(0, ((m.hp ?? 0) / (m.maxHp ?? m.hp ?? 1)) * 100)}%`,
+                          }}
+                        />
+                      </div>
+                      <button
+                        onClick={() => updateMonsterHp(idx, 1)}
+                        className="w-6 h-6 bg-green-900/50 hover:bg-green-600 rounded text-white text-xs font-black transition-colors"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </section>
           )}
