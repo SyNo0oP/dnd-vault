@@ -419,6 +419,9 @@ export default function GameSession({
 
         {/* ── ASIDE GAUCHE ───────────────────────────────────────────────── */}
         <aside className="w-80 border-r border-white/5 bg-slate-900/50 flex flex-col p-6 overflow-y-auto">
+
+          {/* ── VUE MJ ──────────────────────────────────────────────────── */}
+          {isDM && (
           <section className="mb-10">
             <h3 className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-6">
               Aventuriers Connectés
@@ -439,94 +442,48 @@ export default function GameSession({
                   <div className="flex justify-between items-center">
                     <div>
                       <p className="font-bold text-sm text-white">{p.name}</p>
-                      <p className="text-[9px] text-slate-500 uppercase font-black">
-                        {p.class}
-                      </p>
+                      <p className="text-[9px] text-slate-500 uppercase font-black">{p.class}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-xs font-black text-amber-500">
-                        {p.hp}/{p.maxHp} PV
-                      </p>
-                      <p className="text-[8px] text-slate-600 font-black">
-                        CA {p.ac}
-                      </p>
+                      <p className="text-xs font-black text-amber-500">{p.hp}/{p.maxHp} PV</p>
+                      <p className="text-[8px] text-slate-600 font-black">CA {p.ac}</p>
                     </div>
                   </div>
-
-                  {/* Contrôles PV — MJ uniquement */}
-                  {isDM && (
-                    <>
-                    <div className="mt-2 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all ${
-                          p.maxHp > 0 && p.hp / p.maxHp < 0.25
-                            ? "bg-red-500"
-                            : p.maxHp > 0 && p.hp / p.maxHp < 0.5
-                            ? "bg-yellow-500"
-                            : "bg-green-500"
-                        }`}
-                        style={{ width: `${p.maxHp > 0 ? Math.max(0, (p.hp / p.maxHp) * 100) : 0}%` }}
-                      />
-                    </div>
-                    <div className="mt-3 flex items-center gap-2">
-                      <button
-                        onClick={() => updatePlayerHp(p.id, -1)}
-                        className="w-7 h-7 rounded-lg bg-red-500/10 text-red-400 text-xs font-black hover:bg-red-500/30 transition-all"
-                      >
-                        −
-                      </button>
-                      <input
-                        type="number"
-                        placeholder="Dégâts"
-                        value={dmHpInputs[p.id] ?? ""}
-                        onChange={(e) =>
-                          setDmHpInputs((prev) => ({
-                            ...prev,
-                            [p.id]: e.target.value,
-                          }))
-                        }
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") applyDamageInput(p.id);
-                        }}
-                        className="flex-1 bg-slate-900 border border-white/10 rounded-lg px-2 py-1 text-[10px] text-white text-center focus:outline-none focus:border-amber-500"
-                      />
-                      <button
-                        onClick={() => applyDamageInput(p.id)}
-                        className="text-[8px] font-black text-amber-500 uppercase px-2 py-1 bg-amber-500/10 rounded-lg hover:bg-amber-500/30 transition-all"
-                      >
-                        OK
-                      </button>
-                      <button
-                        onClick={() => updatePlayerHp(p.id, 1)}
-                        className="w-7 h-7 rounded-lg bg-green-500/10 text-green-400 text-xs font-black hover:bg-green-500/30 transition-all"
-                      >
-                        +
-                      </button>
-                    </div>
-                    </>
-                  )}
-
+                  <div className="mt-2 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${
+                        p.maxHp > 0 && p.hp / p.maxHp < 0.25 ? "bg-red-500"
+                        : p.maxHp > 0 && p.hp / p.maxHp < 0.5 ? "bg-yellow-500"
+                        : "bg-green-500"
+                      }`}
+                      style={{ width: `${p.maxHp > 0 ? Math.max(0, (p.hp / p.maxHp) * 100) : 0}%` }}
+                    />
+                  </div>
+                  <div className="mt-3 flex items-center gap-2">
+                    <button onClick={() => updatePlayerHp(p.id, -1)} className="w-7 h-7 rounded-lg bg-red-500/10 text-red-400 text-xs font-black hover:bg-red-500/30 transition-all">−</button>
+                    <input
+                      type="number"
+                      placeholder="Dégâts"
+                      value={dmHpInputs[p.id] ?? ""}
+                      onChange={(e) => setDmHpInputs((prev) => ({ ...prev, [p.id]: e.target.value }))}
+                      onKeyDown={(e) => { if (e.key === "Enter") applyDamageInput(p.id); }}
+                      className="flex-1 bg-slate-900 border border-white/10 rounded-lg px-2 py-1 text-[10px] text-white text-center focus:outline-none focus:border-amber-500"
+                    />
+                    <button onClick={() => applyDamageInput(p.id)} className="text-[8px] font-black text-amber-500 uppercase px-2 py-1 bg-amber-500/10 rounded-lg hover:bg-amber-500/30 transition-all">OK</button>
+                    <button onClick={() => updatePlayerHp(p.id, 1)} className="w-7 h-7 rounded-lg bg-green-500/10 text-green-400 text-xs font-black hover:bg-green-500/30 transition-all">+</button>
+                  </div>
                   {/* Mini fiche au hover */}
                   <div
-                    onMouseEnter={() => {
-                      if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
-                    }}
-                    onMouseLeave={() => {
-                      hoverTimeout.current = setTimeout(() => setHoveredPlayerId(null), 300);
-                    }}
+                    onMouseEnter={() => { if (hoverTimeout.current) clearTimeout(hoverTimeout.current); }}
+                    onMouseLeave={() => { hoverTimeout.current = setTimeout(() => setHoveredPlayerId(null), 300); }}
                     className={`absolute left-full ml-4 top-0 w-64 bg-slate-900 border border-amber-500/30 p-4 rounded-2xl transition-opacity z-[999] shadow-2xl ${
                       hoveredPlayerId === p.id ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
                     }`}
                   >
-                    <p className="text-[10px] font-black text-amber-500 uppercase mb-3">
-                      Statistiques de {p.name}
-                    </p>
+                    <p className="text-[10px] font-black text-amber-500 uppercase mb-3">Statistiques de {p.name}</p>
                     <div className="grid grid-cols-3 gap-2">
                       {(["str", "dex", "con"] as const).map((stat) => (
-                        <div
-                          key={stat}
-                          className="bg-slate-950 p-2 rounded-lg text-center text-[10px]"
-                        >
+                        <div key={stat} className="bg-slate-950 p-2 rounded-lg text-center text-[10px]">
                           <p className="text-slate-500 uppercase">{stat}</p>
                           <p className="font-black">{p[stat] ?? "—"}</p>
                         </div>
@@ -540,6 +497,60 @@ export default function GameSession({
               ))}
             </div>
           </section>
+          )}
+
+          {/* ── VUE JOUEUR ──────────────────────────────────────────────── */}
+          {!isDM && (() => {
+            const me = gameState.players.find((p) => p.email === authSession?.user?.email);
+            return (
+              <>
+                {me && (
+                  <div className="mb-6 bg-slate-950 border border-blue-500/30 p-4 rounded-2xl">
+                    <p className="text-[10px] font-black text-blue-400 uppercase mb-2">Mon Personnage</p>
+                    <p className="font-bold text-white">{me.name}</p>
+                    <p className="text-[9px] text-slate-500 uppercase">{me.class}</p>
+                    <div className="mt-2 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${
+                          me.maxHp > 0 && me.hp / me.maxHp < 0.25 ? "bg-red-500"
+                          : me.maxHp > 0 && me.hp / me.maxHp < 0.5 ? "bg-yellow-500"
+                          : "bg-green-500"
+                        }`}
+                        style={{ width: `${me.maxHp > 0 ? Math.max(0, (me.hp / me.maxHp) * 100) : 0}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-amber-500 font-black mt-1">{me.hp}/{me.maxHp} PV — CA {me.ac}</p>
+                  </div>
+                )}
+                <h3 className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-4">
+                  Aventuriers Connectés
+                </h3>
+                <div className="space-y-3">
+                  {gameState.players
+                    .filter((p) => p.email !== authSession?.user?.email)
+                    .map((p) => (
+                      <div key={p.id} className="bg-slate-950 p-3 rounded-xl border border-white/5">
+                        <div className="flex justify-between">
+                          <span className="text-sm font-bold text-white">{p.name}</span>
+                          <span className="text-xs text-amber-500 font-black">{p.hp}/{p.maxHp} PV</span>
+                        </div>
+                        <div className="mt-1.5 h-1 bg-slate-800 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${
+                              p.maxHp > 0 && p.hp / p.maxHp < 0.25 ? "bg-red-500"
+                              : p.maxHp > 0 && p.hp / p.maxHp < 0.5 ? "bg-yellow-500"
+                              : "bg-green-500"
+                            }`}
+                            style={{ width: `${p.maxHp > 0 ? Math.max(0, (p.hp / p.maxHp) * 100) : 0}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </>
+            );
+          })()}
+
 
           {isDM && gameState.campaign && (
             <section className="flex-1">
