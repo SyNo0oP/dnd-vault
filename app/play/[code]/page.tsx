@@ -135,19 +135,24 @@ export default function GameSession({
         const res = await fetch(`/api/sessions?code=${code}`);
         const data = await res.json();
         if (!data.session) return;
-        if (isDM) return;
         setGameState((prev) => ({
           ...prev,
-          currentAct: data.session.currentAct ?? prev.currentAct,
-          currentSubAct: data.session.currentSubAct ?? prev.currentSubAct,
-          monsters: data.session.monsters ?? prev.monsters,
-          fogRevealedCells:
-            data.session.fogRevealedCells ?? prev.fogRevealedCells,
+          // MJ et joueurs reçoivent players + log (pour voir les dés des autres)
           players:
             (data.session.players as Player[])?.length > 0
               ? data.session.players
               : prev.players,
           log: data.session.log ?? prev.log,
+          // Joueurs seulement : scène active et brouillard viennent du serveur
+          ...(isDM
+            ? {}
+            : {
+                currentAct: data.session.currentAct ?? prev.currentAct,
+                currentSubAct: data.session.currentSubAct ?? prev.currentSubAct,
+                monsters: data.session.monsters ?? prev.monsters,
+                fogRevealedCells:
+                  data.session.fogRevealedCells ?? prev.fogRevealedCells,
+              }),
         }));
       } catch (e) {
         console.error("Polling error:", e);
