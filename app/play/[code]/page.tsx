@@ -104,6 +104,7 @@ export default function GameSession({
   const isDM = searchParams.get("role") === "dm";
   const { data: authSession } = useSession();
   const hasRegistered = useRef(false);
+  const logClearedAt = useRef<number | null>(null);
 
   const [gameState, setGameState] = useState<GameState>({
     currentAct: 0,
@@ -115,6 +116,7 @@ export default function GameSession({
     log: ["La session commence..."],
   });
 
+  const [secretLog, setSecretLog] = useState<string[]>([]);
   const [dmHpInputs, setDmHpInputs] = useState<Record<string, string>>({});
   const [fogEditMode, setFogEditMode] = useState(false);
   const [hoveredPlayerId, setHoveredPlayerId] = useState<string | null>(null);
@@ -165,7 +167,19 @@ export default function GameSession({
             (data.session.players as Player[])?.length > 0
               ? data.session.players
               : prev.players,
-          log: data.session.log ?? prev.log,
+          log: (() => {
+            const serverLog: string[] = data.session.log ?? [];
+            if (!logClearedAt.current) return serverLog;
+            const clearedAt = logClearedAt.current;
+            return serverLog.filter((l: string) => {
+              const parts = l.split("|");
+              const ts = parseInt(parts[0]);
+              // Entrée avec timestamp → garder seulement si postérieure à l'effacement
+              if (!isNaN(ts)) return ts > clearedAt;
+              // Entrée SANS timestamp (anciennes) → toujours masquer après effacement
+              return false;
+            });
+          })(),
           ...(isDM
             ? {}
             : {
@@ -374,7 +388,6 @@ export default function GameSession({
     toggleFogCell(col, row);
   };
 
-  // ── FIX 1 : boutons toujours disponibles si map présente ─────────────────
   const revealAllCells = () => {
     if (!currentScene) return;
     const gs = currentScene.gridSize ?? 50;
@@ -416,7 +429,6 @@ export default function GameSession({
     const rows = Math.ceil(canvas.height / gs) + 1;
 
     const manualRevealed = new Set(gameState.fogRevealedCells);
-    // ── FIX 2 : vision joueur toujours calculée ───────────────────────────
     const playerVision = getPlayerVisionCells(gameState.players, gs, ox, oy);
 
     const isVisible = (col: number, row: number) => {
@@ -453,10 +465,11 @@ export default function GameSession({
 
   const rollDice = (d: number, secret: boolean) => {
     const r = Math.floor(Math.random() * d) + 1;
-    const entry = secret ? `[SECRET] D${d} : ${r}` : `D${d} : ${r}`;
     if (secret) {
-      setGameState((prev) => ({ ...prev, log: [entry, ...prev.log] }));
+      const entry = `[SECRET] D${d} : ${r}`;
+      setSecretLog((prev) => [entry, ...prev]);
     } else {
+      const entry = `${Date.now()}|D${d} : ${r}`;
       setGameState((prev) => {
         const newLog = [entry, ...prev.log];
         syncToServer({ log: newLog });
@@ -465,13 +478,15 @@ export default function GameSession({
     }
   };
 
+  const displayLog = isDM ? [...secretLog, ...gameState.log] : gameState.log;
+
   const activeMonsters =
     gameState.monsters.length > 0
       ? gameState.monsters
       : (currentScene?.monsters ?? []);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white flex flex-col overflow-hidden">
+    <div className="h-screen bg-slate-950 text-white flex flex-col overflow-hidden">
       <header className="h-16 border-b border-white/10 bg-slate-900/90 flex items-center px-6 gap-8 z-50">
         <div className="bg-amber-500 text-slate-950 px-4 py-1 rounded-full text-[10px] font-black uppercase">
           SESSION: {code}
@@ -507,7 +522,6 @@ export default function GameSession({
             >
               {fogEditMode ? "Brouillard ON" : "Brouillard"}
             </button>
-            {/* FIX 1 : visible dès qu'il y a une map */}
             {currentScene?.mapUrl && (
               <>
                 <button
@@ -528,7 +542,7 @@ export default function GameSession({
         )}
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden min-h-0">
         <aside className="w-80 border-r border-white/5 bg-slate-900/50 flex flex-col p-6 overflow-y-auto">
           {isDM && (
             <section className="mb-10">
@@ -780,7 +794,7 @@ export default function GameSession({
           )}
         </aside>
 
-        <section className="flex-1 bg-black relative flex items-center justify-center p-10 overflow-auto scrollbar-hide">
+        <section className="flex-1 bg-black relative flex items-start justify-start p-10 overflow-auto scrollbar-hide">
           {currentScene?.mapUrl ? (
             <div ref={fogWrapperRef} className="relative inline-block">
               <BattleGrid
@@ -801,7 +815,6 @@ export default function GameSession({
                     const [x, y] = cell.split(",").map(Number);
                     return { x, y };
                   });
-                  // FIX 2 : vision joueur toujours calculée
                   const vision = getPlayerVisionCells(
                     gameState.players,
                     currentScene.gridSize ?? 50,
@@ -847,25 +860,37 @@ export default function GameSession({
         </section>
 
         <aside className="w-72 border-l border-white/5 bg-slate-900/50 flex flex-col">
-          <div className="flex-1 p-6 overflow-y-auto space-y-3">
-            <h3 className="text-[9px] font-black text-slate-600 uppercase tracking-widest mb-4">
-              Log de Combat
-            </h3>
-            {gameState.log.map((l, i) => (
+          <div className="flex-1 overflow-y-auto p-6 space-y-3 min-h-0">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-[9px] font-black text-slate-600 uppercase tracking-widest">
+                Log de Combat
+              </h3>
+              <button
+                onClick={() => {
+                  logClearedAt.current = Date.now();
+                  setSecretLog([]);
+                  setGameState((prev) => ({ ...prev, log: [] }));
+                }}
+                className="text-[8px] font-black text-slate-700 hover:text-red-400 uppercase tracking-widest transition-colors"
+              >
+                Effacer
+              </button>
+            </div>
+            {displayLog.map((l, i) => (
               <p
                 key={i}
                 className={`text-[10px] leading-relaxed border-l pl-3 ${
-                  l.startsWith("[SECRET]")
+                  l.includes("|[SECRET]") || l.startsWith("[SECRET]")
                     ? "text-amber-500/60 border-amber-500/40 italic"
                     : "text-slate-400 border-amber-500/20"
                 }`}
               >
-                {l}
+                {l.includes("|") ? l.split("|").slice(1).join("|") : l}
               </p>
             ))}
           </div>
 
-          <div className="p-4 bg-slate-950 border-t border-white/5">
+          <div className="shrink-0 p-4 bg-slate-950 border-t border-white/5">
             <p className="text-[9px] font-black text-slate-600 uppercase tracking-widest mb-3">
               {isDM ? "Dés publics" : "Dés partagés"}
             </p>
@@ -883,7 +908,7 @@ export default function GameSession({
           </div>
 
           {isDM && (
-            <div className="p-4 bg-slate-950 border-t border-amber-500/10">
+            <div className="shrink-0 p-4 bg-slate-950 border-t border-amber-500/10">
               <p className="text-[9px] font-black text-amber-500/50 uppercase tracking-widest mb-3">
                 Dés secrets MJ
               </p>

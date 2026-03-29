@@ -57,7 +57,7 @@ export async function POST(req: Request) {
       monsters: [],
       fogRevealedCells: [],
       players: [],
-      log: ["La session commence..."],
+      log: [`${Date.now()}|La session commence...`],
       createdAt: new Date(),
     });
 
