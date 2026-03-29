@@ -4,6 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import BattleGrid from "@/app/components/BattleGrid";
 import CharacterSheet from "@/app/components/CharacterSheet";
+import MonsterLibraryModal from "@/app/components/MonsterLibraryModal";
 import { getRaceBonus } from "@/lib/dnd-rules";
 
 interface Player {
@@ -138,6 +139,7 @@ export default function GameSession({
   const monsterHoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+  const [showMonsterLibrary, setShowMonsterLibrary] = useState(false);
 
   const currentScene =
     gameState.campaign?.acts[gameState.currentAct]?.subActs[
@@ -790,6 +792,15 @@ export default function GameSession({
             </section>
           )}
 
+          {isDM && currentScene?.mapUrl && (
+            <button
+              onClick={() => setShowMonsterLibrary(true)}
+              className="mt-4 w-full py-3 bg-amber-500/10 border border-amber-500/30 text-amber-500 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-amber-500 hover:text-slate-950 transition-all"
+            >
+              Invoquer un monstre
+            </button>
+          )}
+
           {isDM && activeMonsters.length > 0 && (
             <section className="mt-6">
               <h3 className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-4">
@@ -1085,6 +1096,25 @@ export default function GameSession({
           onClose={() => setSelectedCharacter(null)}
         />
       )}
+
+      <MonsterLibraryModal
+        isOpen={showMonsterLibrary}
+        onClose={() => setShowMonsterLibrary(false)}
+        onAddMonster={(monster: { name: string; hp: number; ac?: number }) => {
+          const newMonster: Monster = {
+            name: monster.name,
+            hp: monster.hp,
+            maxHp: monster.hp,
+            ac: monster.ac,
+            x: 0,
+            y: 0,
+          };
+          const updatedMonsters = [...gameState.monsters, newMonster];
+          setGameState((prev) => ({ ...prev, monsters: updatedMonsters }));
+          syncToServer({ monsters: updatedMonsters });
+          setShowMonsterLibrary(false);
+        }}
+      />
 
       {hoveredMonster !== null && monsterHoverPos !== null && (() => {
         const m = hoveredMonster;
