@@ -140,12 +140,24 @@ export default function GameSession({
       .then((res) => res.json())
       .then((data) => {
         if (data.session && data.campaign) {
+          const actIdx = data.session.currentAct ?? 0;
+          const subIdx = data.session.currentSubAct ?? 0;
+          const sceneMonsters: Monster[] =
+            data.campaign?.acts?.[actIdx]?.subActs?.[subIdx]?.monsters ?? [];
+          const initialMonsters =
+            (data.session.monsters?.length > 0)
+              ? data.session.monsters
+              : sceneMonsters.map((m: Monster) => ({
+                  ...m,
+                  maxHp: m.maxHp ?? m.hp ?? 10,
+                }));
+
           setGameState((prev) => ({
             ...prev,
             campaign: data.campaign,
-            currentAct: data.session.currentAct ?? 0,
-            currentSubAct: data.session.currentSubAct ?? 0,
-            monsters: data.session.monsters ?? [],
+            currentAct: actIdx,
+            currentSubAct: subIdx,
+            monsters: initialMonsters,
             fogRevealedCells: data.session.fogRevealedCells ?? [],
             players: data.session.players ?? [],
             log: data.session.log ?? ["La session commence..."],
@@ -307,10 +319,16 @@ export default function GameSession({
   );
 
   const changeAct = (actIdx: number) => {
+    const sceneMonsters: Monster[] =
+      gameState.campaign?.acts?.[actIdx]?.subActs?.[0]?.monsters ?? [];
+    const initialMonsters = sceneMonsters.map((m) => ({
+      ...m,
+      maxHp: m.maxHp ?? m.hp ?? 10,
+    }));
     const update: SessionSyncFields = {
       currentAct: actIdx,
       currentSubAct: 0,
-      monsters: [],
+      monsters: initialMonsters,
       fogRevealedCells: [],
     };
     setGameState((prev) => ({ ...prev, ...update }));
@@ -318,9 +336,16 @@ export default function GameSession({
   };
 
   const changeSubAct = (subIdx: number) => {
+    const sceneMonsters: Monster[] =
+      gameState.campaign?.acts?.[gameState.currentAct]?.subActs?.[subIdx]
+        ?.monsters ?? [];
+    const initialMonsters = sceneMonsters.map((m) => ({
+      ...m,
+      maxHp: m.maxHp ?? m.hp ?? 10,
+    }));
     const update: SessionSyncFields = {
       currentSubAct: subIdx,
-      monsters: [],
+      monsters: initialMonsters,
       fogRevealedCells: [],
     };
     setGameState((prev) => ({ ...prev, ...update }));
