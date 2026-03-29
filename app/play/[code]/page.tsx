@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import BattleGrid from "@/app/components/BattleGrid";
+import { getRaceBonus } from "@/lib/dnd-rules";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -19,6 +20,11 @@ interface Player {
   str?: number;
   dex?: number;
   con?: number;
+  int?: number;
+  wis?: number;
+  cha?: number;
+  level?: number;
+  race?: string;
 }
 
 interface Monster {
@@ -162,6 +168,18 @@ export default function GameSession({
     return () => clearInterval(poll);
   }, [code, isDM]);
 
+  const buildFallbackPlayer = (email: string, name?: string | null): Player => ({
+    id: email,
+    email,
+    name: name ?? "Aventurier",
+    class: "Aventurier",
+    hp: 20,
+    maxHp: 20,
+    ac: 10,
+    x: 0,
+    y: 0,
+  });
+
   // ── Auto-inscription joueur ───────────────────────────────────────────────
 
   useEffect(() => {
@@ -176,28 +194,67 @@ export default function GameSession({
       return;
     }
 
-    const newPlayer: Player = {
-      id: email,
-      email,
-      name: authSession.user.name ?? "Aventurier",
-      class: "Aventurier",
-      hp: 20,
-      maxHp: 20,
-      ac: 10,
-      x: 0,
-      y: 0,
+    const registerPlayer = async () => {
+      let newPlayer: Player;
+
+      const activeId = localStorage.getItem("dnd_vault_active_character");
+      if (activeId) {
+        try {
+          const charRes = await fetch(`/api/characters?email=${encodeURIComponent(email)}`);
+          const chars = await charRes.json();
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const character = Array.isArray(chars) ? chars.find((c: any) => c._id === activeId) : null;
+
+          if (character?.stats) {
+            const rb = getRaceBonus(character.race ?? "");
+            const s = character.stats;
+            const dexTotal = (s.dexterite ?? 10) + (rb.dexterite ?? 0);
+
+            newPlayer = {
+              id: email,
+              email,
+              name: character.name ?? authSession.user?.name ?? "Aventurier",
+              class: character.class ?? "Aventurier",
+              race: character.race,
+              level: character.level ?? 1,
+              hp: character.hpMax ?? 20,
+              maxHp: character.hpMax ?? 20,
+              ac: 10 + Math.floor((dexTotal - 10) / 2),
+              x: 0,
+              y: 0,
+              str: (s.force ?? 10) + (rb.force ?? 0),
+              dex: dexTotal,
+              con: (s.constitution ?? 10) + (rb.constitution ?? 0),
+              int: (s.intelligence ?? 10) + (rb.intelligence ?? 0),
+              wis: (s.sagesse ?? 10) + (rb.sagesse ?? 0),
+              cha: (s.charisme ?? 10) + (rb.charisme ?? 0),
+            };
+          } else {
+            newPlayer = buildFallbackPlayer(email, authSession.user?.name);
+          }
+        } catch {
+          newPlayer = buildFallbackPlayer(email, authSession.user?.name);
+        }
+      } else {
+        newPlayer = buildFallbackPlayer(email, authSession.user?.name);
+      }
+
+      try {
+        const res = await fetch("/api/sessions", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code, newPlayer }),
+        });
+        if (res.ok) {
+          hasRegistered.current = true;
+          setGameState((prev) => ({ ...prev, players: [...prev.players, newPlayer] }));
+        }
+      } catch (e) {
+        console.error("Erreur inscription joueur:", e);
+      }
     };
 
-    fetch("/api/sessions", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code, newPlayer }),
-    }).then((res) => {
-      if (res.ok) {
-        hasRegistered.current = true;
-        setGameState((prev) => ({ ...prev, players: [...prev.players, newPlayer] }));
-      }
-    }).catch((e) => console.error("Erreur inscription joueur:", e));
+    registerPlayer();
   }, [code, isDM, authSession, gameState.campaign, gameState.players]);
 
   // ── syncToServer ──────────────────────────────────────────────────────────
