@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import BattleGrid from "@/app/components/BattleGrid";
+import CharacterSheet from "@/app/components/CharacterSheet";
 import { getRaceBonus } from "@/lib/dnd-rules";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -102,6 +103,8 @@ export default function GameSession({
   const [fogEditMode, setFogEditMode] = useState(false);
   const [hoveredPlayerId, setHoveredPlayerId] = useState<string | null>(null);
   const [hoverPos, setHoverPos] = useState<{ top: number; left: number } | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [selectedCharacter, setSelectedCharacter] = useState<any | null>(null);
   const fogCanvasRef = useRef<HTMLCanvasElement>(null);
   const fogWrapperRef = useRef<HTMLDivElement>(null);
   const hoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -790,23 +793,93 @@ export default function GameSession({
             style={{ position: "fixed", top: hoverPos.top, left: hoverPos.left, zIndex: 9999 }}
             className="w-64 bg-slate-900 border border-amber-500/30 p-4 rounded-2xl shadow-2xl"
           >
-            <p className="text-[10px] font-black text-amber-500 uppercase mb-3">
-              Statistiques de {p.name}
-            </p>
-            <div className="grid grid-cols-3 gap-2">
-              {(["str", "dex", "con"] as const).map((stat) => (
-                <div key={stat} className="bg-slate-950 p-2 rounded-lg text-center text-[10px]">
-                  <p className="text-slate-500 uppercase">{stat}</p>
-                  <p className="font-black">{p[stat] ?? "—"}</p>
-                </div>
-              ))}
+            {/* Header */}
+            <div className="flex justify-between items-center mb-3">
+              <div>
+                <p className="font-bold text-white text-sm">{p.name}</p>
+                <p className="text-[9px] text-slate-400 uppercase">
+                  Niveau {p.level ?? 1} {p.class}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs font-black text-amber-500">
+                  {p.hp}/{p.maxHp} PV
+                </p>
+                <p className="text-[9px] text-slate-500">CA {p.ac}</p>
+              </div>
             </div>
-            <button className="w-full mt-4 py-2 bg-amber-500/10 text-amber-500 rounded-lg text-[9px] font-black uppercase hover:bg-amber-500 hover:text-slate-950 transition-all">
+
+            {/* Barre PV */}
+            <div className="h-1.5 bg-slate-800 rounded-full mb-4 overflow-hidden">
+              <div
+                className={`h-full rounded-full ${
+                  p.hp / p.maxHp < 0.25 ? "bg-red-500"
+                  : p.hp / p.maxHp < 0.5 ? "bg-yellow-500"
+                  : "bg-green-500"
+                }`}
+                style={{ width: `${(p.hp / p.maxHp) * 100}%` }}
+              />
+            </div>
+
+            {/* 6 caractéristiques */}
+            <div className="grid grid-cols-3 gap-2 mb-4">
+              {[
+                { label: "FOR", val: p.str },
+                { label: "DEX", val: p.dex },
+                { label: "CON", val: p.con },
+                { label: "INT", val: p.int },
+                { label: "SAG", val: p.wis },
+                { label: "CHA", val: p.cha },
+              ].map(({ label, val }) => {
+                const mod = val ? Math.floor((val - 10) / 2) : null;
+                return (
+                  <div key={label} className="bg-slate-950 p-2 rounded-xl text-center border border-white/5">
+                    <p className="text-[8px] text-slate-500 uppercase font-black">{label}</p>
+                    <p className="text-sm font-black text-white">{val ?? "—"}</p>
+                    <p className="text-[9px] text-amber-500 font-bold">
+                      {mod !== null ? (mod >= 0 ? `+${mod}` : `${mod}`) : ""}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Bouton fiche complète */}
+            <button
+              onClick={() => {
+                setSelectedCharacter({
+                  name: p.name,
+                  level: p.level ?? 1,
+                  race: p.race ?? "",
+                  class: p.class,
+                  stats: {
+                    force: p.str ?? 10,
+                    dexterite: p.dex ?? 10,
+                    constitution: p.con ?? 10,
+                    intelligence: p.int ?? 10,
+                    sagesse: p.wis ?? 10,
+                    charisme: p.cha ?? 10,
+                  },
+                  hpMax: p.maxHp,
+                  speed: 9,
+                });
+                setHoveredPlayerId(null);
+              }}
+              className="w-full py-2 bg-amber-500/10 text-amber-500 rounded-xl text-[9px] font-black uppercase hover:bg-amber-500 hover:text-slate-950 transition-all"
+            >
               Voir fiche complète
             </button>
           </div>
         );
       })()}
+
+      {/* ── FICHE COMPLÈTE (CharacterSheet modal) ──────────────────────── */}
+      {selectedCharacter && (
+        <CharacterSheet
+          character={selectedCharacter}
+          onClose={() => setSelectedCharacter(null)}
+        />
+      )}
     </div>
   );
 }
