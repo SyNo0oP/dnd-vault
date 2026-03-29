@@ -61,6 +61,8 @@ interface Campaign {
 interface GameState {
   currentAct: number;
   currentSubAct: number;
+  activeAct: number;
+  activeSubAct: number;
   campaign: Campaign | null;
   players: Player[];
   monsters: Monster[];
@@ -71,6 +73,8 @@ interface GameState {
 interface SessionSyncFields {
   currentAct?: number;
   currentSubAct?: number;
+  activeAct?: number;
+  activeSubAct?: number;
   monsters?: Monster[];
   fogRevealedCells?: string[];
   players?: Player[];
@@ -112,6 +116,8 @@ export default function GameSession({
   const [gameState, setGameState] = useState<GameState>({
     currentAct: 0,
     currentSubAct: 0,
+    activeAct: 0,
+    activeSubAct: 0,
     campaign: null,
     players: [],
     monsters: [],
@@ -170,6 +176,8 @@ export default function GameSession({
             campaign: data.campaign,
             currentAct: actIdx,
             currentSubAct: subIdx,
+            activeAct: data.session.activeAct ?? actIdx,
+            activeSubAct: data.session.activeSubAct ?? subIdx,
             monsters: initialMonsters,
             fogRevealedCells: data.session.fogRevealedCells ?? [],
             players: data.session.players ?? [],
@@ -208,8 +216,10 @@ export default function GameSession({
           ...(isDM
             ? {}
             : {
-                currentAct: data.session.currentAct ?? prev.currentAct,
-                currentSubAct: data.session.currentSubAct ?? prev.currentSubAct,
+                currentAct: data.session.activeAct ?? data.session.currentAct ?? prev.currentAct,
+                currentSubAct: data.session.activeSubAct ?? data.session.currentSubAct ?? prev.currentSubAct,
+                activeAct: data.session.activeAct ?? data.session.currentAct ?? prev.activeAct,
+                activeSubAct: data.session.activeSubAct ?? data.session.currentSubAct ?? prev.activeSubAct,
                 monsters: data.session.monsters ?? prev.monsters,
                 fogRevealedCells:
                   data.session.fogRevealedCells ?? prev.fogRevealedCells,
@@ -332,32 +342,32 @@ export default function GameSession({
   );
 
   const changeAct = (actIdx: number) => {
-    const sceneMonsters: Monster[] =
-      gameState.campaign?.acts?.[actIdx]?.subActs?.[0]?.monsters ?? [];
-    const initialMonsters = sceneMonsters.map((m) => ({
-      ...m,
-      maxHp: m.maxHp ?? m.hp ?? 10,
-    }));
-    const update: SessionSyncFields = {
+    setGameState((prev) => ({
+      ...prev,
       currentAct: actIdx,
       currentSubAct: 0,
-      monsters: initialMonsters,
-      fogRevealedCells: [],
-    };
-    setGameState((prev) => ({ ...prev, ...update }));
-    syncToServer(update);
+    }));
   };
 
   const changeSubAct = (subIdx: number) => {
+    setGameState((prev) => ({
+      ...prev,
+      currentSubAct: subIdx,
+    }));
+  };
+
+  const activateCurrentScene = () => {
+    const actIdx = gameState.currentAct;
+    const subIdx = gameState.currentSubAct;
     const sceneMonsters: Monster[] =
-      gameState.campaign?.acts?.[gameState.currentAct]?.subActs?.[subIdx]
-        ?.monsters ?? [];
+      gameState.campaign?.acts?.[actIdx]?.subActs?.[subIdx]?.monsters ?? [];
     const initialMonsters = sceneMonsters.map((m) => ({
       ...m,
       maxHp: m.maxHp ?? m.hp ?? 10,
     }));
     const update: SessionSyncFields = {
-      currentSubAct: subIdx,
+      activeAct: actIdx,
+      activeSubAct: subIdx,
       monsters: initialMonsters,
       fogRevealedCells: [],
     };
@@ -765,30 +775,52 @@ export default function GameSession({
           {isDM && gameState.campaign && (
             <section className="flex-1">
               <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-6 italic">
-                Déroulement de l'Acte
+                Déroulement de l&apos;Acte
               </h3>
               <div className="space-y-2 border-l border-white/10 ml-2">
                 {gameState.campaign.acts[gameState.currentAct]?.subActs.map(
-                  (sub, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => changeSubAct(idx)}
-                      className={`block w-full text-left pl-6 py-2 text-[10px] font-bold uppercase relative transition-all ${
-                        gameState.currentSubAct === idx
-                          ? "text-amber-500"
-                          : "text-slate-500"
-                      }`}
-                    >
+                  (sub, idx) => {
+                    const isViewing = gameState.currentSubAct === idx;
+                    const isActive =
+                      gameState.activeAct === gameState.currentAct &&
+                      gameState.activeSubAct === idx;
+                    return (
                       <div
-                        className={`absolute left-[-5px] top-1/2 -translate-y-1/2 w-2 h-2 rounded-full ${
-                          gameState.currentSubAct === idx
-                            ? "bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]"
-                            : "bg-slate-800"
+                        key={idx}
+                        className={`flex items-center gap-2 pl-4 py-2 relative transition-all ${
+                          isViewing ? "text-amber-500" : "text-slate-500"
                         }`}
-                      />
-                      {sub.title}
-                    </button>
-                  ),
+                      >
+                        <div
+                          className={`absolute left-[-5px] top-1/2 -translate-y-1/2 w-2 h-2 rounded-full ${
+                            isViewing
+                              ? "bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]"
+                              : "bg-slate-800"
+                          }`}
+                        />
+                        <button
+                          onClick={() => changeSubAct(idx)}
+                          className="flex-1 text-left text-[10px] font-bold uppercase truncate"
+                        >
+                          {sub.title}
+                        </button>
+                        {isActive ? (
+                          <span className="text-[7px] font-black text-green-400 bg-green-500/10 border border-green-500/30 px-2 py-0.5 rounded-lg uppercase shrink-0">
+                            Actif
+                          </span>
+                        ) : (
+                          isViewing && (
+                            <button
+                              onClick={activateCurrentScene}
+                              className="text-[7px] font-black text-amber-500 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded-lg uppercase hover:bg-amber-500 hover:text-slate-950 transition-all shrink-0"
+                            >
+                              &#9654; Activer
+                            </button>
+                          )
+                        )}
+                      </div>
+                    );
+                  },
                 )}
               </div>
             </section>

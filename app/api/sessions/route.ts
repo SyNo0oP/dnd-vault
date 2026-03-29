@@ -113,6 +113,8 @@ export async function PUT(req: Request) {
       code,
       currentAct,
       currentSubAct,
+      activeAct,
+      activeSubAct,
       monsters,
       fogRevealedCells,
       players,
@@ -168,6 +170,8 @@ export async function PUT(req: Request) {
     const updateFields: Record<string, unknown> = {};
     if (currentAct !== undefined) updateFields.currentAct = currentAct;
     if (currentSubAct !== undefined) updateFields.currentSubAct = currentSubAct;
+    if (activeAct !== undefined) updateFields.activeAct = activeAct;
+    if (activeSubAct !== undefined) updateFields.activeSubAct = activeSubAct;
     if (monsters !== undefined) updateFields.monsters = monsters;
     if (fogRevealedCells !== undefined) updateFields.fogRevealedCells = fogRevealedCells;
     if (players !== undefined) updateFields.players = players;
