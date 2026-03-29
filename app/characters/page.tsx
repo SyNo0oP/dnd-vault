@@ -7,6 +7,11 @@ export default function MyCharacters() {
   const { data: session } = useSession();
   const [characters, setCharacters] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [activeCharId, setActiveCharId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setActiveCharId(localStorage.getItem("dnd_vault_active_character"));
+  }, []);
 
   useEffect(() => {
     if (session?.user?.email) {
@@ -18,6 +23,16 @@ export default function MyCharacters() {
         });
     }
   }, [session]);
+
+  const toggleActive = (id: string) => {
+    if (activeCharId === id) {
+      localStorage.removeItem("dnd_vault_active_character");
+      setActiveCharId(null);
+    } else {
+      localStorage.setItem("dnd_vault_active_character", id);
+      setActiveCharId(id);
+    }
+  };
 
   const deleteCharacter = async (id: string) => {
     if (!confirm("Voulez-vous vraiment effacer cette légende ?")) return;
@@ -76,8 +91,15 @@ export default function MyCharacters() {
           <p className="text-amber-500 font-black animate-pulse text-center uppercase tracking-widest">Lecture du Grimoire...</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {characters.map((c: any) => (
-              <div key={c._id} className="group bg-slate-900/70 backdrop-blur-xl p-6 rounded-3xl border border-white/10 hover:border-amber-500 transition-all shadow-2xl relative overflow-hidden">
+            {characters.map((c: any) => {
+              const isActive = c._id === activeCharId;
+              return (
+              <div key={c._id} className={`group bg-slate-900/70 backdrop-blur-xl p-6 rounded-3xl border-2 ${isActive ? "border-amber-500 shadow-amber-500/20" : "border-white/10 hover:border-amber-500"} transition-all shadow-2xl relative overflow-hidden`}>
+                {isActive && (
+                  <div className="absolute top-3 right-3 bg-amber-500 text-slate-950 text-[8px] font-black uppercase tracking-widest px-3 py-1 rounded-full z-10">
+                    ACTIF
+                  </div>
+                )}
                 <div className="flex justify-between items-start mb-4">
                   <div>
                     <h2 className="text-2xl font-black text-white uppercase truncate w-40">{c.name}</h2>
@@ -96,23 +118,34 @@ export default function MyCharacters() {
                 </div>
 
                 <div className="flex gap-2">
-                  <Link href={`/characters/create?id=${c._id}`} className="flex-1">
-                    <button className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-colors">
+                  <button
+                    onClick={() => toggleActive(c._id)}
+                    className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${
+                      isActive
+                        ? "bg-amber-500 text-slate-950 hover:bg-amber-400"
+                        : "bg-amber-500/10 text-amber-500 hover:bg-amber-500/20"
+                    }`}
+                  >
+                    {isActive ? "Perso actif ✓" : "Définir comme actif"}
+                  </button>
+                  <Link href={`/characters/create?id=${c._id}`}>
+                    <button className="px-4 py-3 bg-slate-800 hover:bg-slate-700 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-colors">
                       Modifier
                     </button>
                   </Link>
-                  <button 
+                  <button
                     onClick={() => deleteCharacter(c._id)}
                     className="px-4 py-3 bg-red-900/20 hover:bg-red-600 text-red-500 hover:text-white rounded-xl transition-all"
                   >
                     🗑️
                   </button>
                 </div>
-                
+
                 {/* Effet au survol */}
                 <div className="absolute inset-0 bg-gradient-to-tr from-amber-500/0 via-amber-500/0 to-amber-500/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
