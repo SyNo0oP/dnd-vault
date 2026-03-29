@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import BattleGrid from "@/app/components/BattleGrid";
 import CharacterSheet from "@/app/components/CharacterSheet";
 import MonsterLibraryModal from "@/app/components/MonsterLibraryModal";
+import MonsterSheet from "@/app/components/MonsterSheet";
 import { getRaceBonus } from "@/lib/dnd-rules";
 
 interface Player {
@@ -140,6 +141,7 @@ export default function GameSession({
     null,
   );
   const [showMonsterLibrary, setShowMonsterLibrary] = useState(false);
+  const [selectedMonster, setSelectedMonster] = useState<Monster | null>(null);
 
   const currentScene =
     gameState.campaign?.acts[gameState.currentAct]?.subActs[
@@ -816,9 +818,17 @@ export default function GameSession({
                       <span className="text-xs font-bold text-white">
                         {m.name}
                       </span>
-                      <span className="text-xs text-amber-500 font-black">
-                        {m.hp ?? "?"} PV
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setSelectedMonster(m)}
+                          className="text-[8px] font-black text-slate-400 uppercase px-2 py-0.5 bg-slate-800 rounded-lg hover:text-amber-500 hover:bg-amber-500/10 transition-all"
+                        >
+                          Fiche
+                        </button>
+                        <span className="text-xs text-amber-500 font-black">
+                          {m.hp ?? "?"} PV
+                        </span>
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <button
@@ -1116,6 +1126,13 @@ export default function GameSession({
         }}
       />
 
+      {selectedMonster && (
+        <MonsterSheet
+          monster={selectedMonster}
+          onClose={() => setSelectedMonster(null)}
+        />
+      )}
+
       {hoveredMonster !== null && monsterHoverPos !== null && (() => {
         const m = hoveredMonster;
         const maxHp = m.maxHp ?? m.hp ?? 10;
@@ -1178,6 +1195,15 @@ export default function GameSession({
                 </button>
               </div>
             )}
+            <button
+              onClick={() => {
+                setSelectedMonster(m);
+                setHoveredMonster(null);
+              }}
+              className="mt-2 w-full py-1.5 bg-amber-500/10 text-amber-500 rounded-xl text-[9px] font-black uppercase hover:bg-amber-500 hover:text-slate-950 transition-all"
+            >
+              Voir fiche complète
+            </button>
           </div>
         );
       })()}
