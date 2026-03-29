@@ -6,8 +6,6 @@ import BattleGrid from "@/app/components/BattleGrid";
 import CharacterSheet from "@/app/components/CharacterSheet";
 import { getRaceBonus } from "@/lib/dnd-rules";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 interface Player {
   id: string;
   name: string;
@@ -76,8 +74,6 @@ interface SessionSyncFields {
   log?: string[];
 }
 
-// ─── Utilitaires ──────────────────────────────────────────────────────────────
-
 const getPlayerVisionCells = (
   players: Player[],
   gridSize: number,
@@ -86,7 +82,7 @@ const getPlayerVisionCells = (
 ): Set<string> => {
   const cells = new Set<string>();
   players.forEach((p) => {
-    if (p.x === 0 && p.y === 0) return; // pas encore placé
+    if (p.x === 0 && p.y === 0) return;
     const col = Math.floor((p.x + gridSize * 0.35 - offsetX) / gridSize);
     const row = Math.floor((p.y + gridSize * 0.35 - offsetY) / gridSize);
     for (let dc = -1; dc <= 1; dc++) {
@@ -97,8 +93,6 @@ const getPlayerVisionCells = (
   });
   return cells;
 };
-
-// ─── Composant ────────────────────────────────────────────────────────────────
 
 export default function GameSession({
   params,
@@ -134,13 +128,10 @@ export default function GameSession({
   const fogWrapperRef = useRef<HTMLDivElement>(null);
   const hoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Déclaré tôt pour être accessible dans les hooks
   const currentScene =
     gameState.campaign?.acts[gameState.currentAct]?.subActs[
       gameState.currentSubAct
     ];
-
-  // ── Chargement initial ────────────────────────────────────────────────────
 
   useEffect(() => {
     fetch(`/api/sessions?code=${code}`)
@@ -162,8 +153,6 @@ export default function GameSession({
       .catch((err) => console.error("Erreur chargement session:", err));
   }, [code]);
 
-  // ── Polling 2s (joueurs uniquement) ───────────────────────────────────────
-
   useEffect(() => {
     const poll = setInterval(async () => {
       try {
@@ -172,13 +161,11 @@ export default function GameSession({
         if (!data.session) return;
         setGameState((prev) => ({
           ...prev,
-          // MJ et joueurs reçoivent players + log (pour voir les dés des autres)
           players:
             (data.session.players as Player[])?.length > 0
               ? data.session.players
               : prev.players,
           log: data.session.log ?? prev.log,
-          // Joueurs seulement : scène active et brouillard viennent du serveur
           ...(isDM
             ? {}
             : {
@@ -211,11 +198,9 @@ export default function GameSession({
     y: 0,
   });
 
-  // ── Auto-inscription joueur ───────────────────────────────────────────────
-
   useEffect(() => {
     if (isDM || !authSession?.user?.email || hasRegistered.current) return;
-    if (gameState.campaign === null) return; // attendre le chargement initial
+    if (gameState.campaign === null) return;
 
     const email = authSession.user.email;
     const alreadyIn = gameState.players.some((p) => p.id === email);
@@ -227,7 +212,6 @@ export default function GameSession({
 
     const registerPlayer = async () => {
       let newPlayer: Player;
-
       const activeId = localStorage.getItem("dnd_vault_active_character");
       if (activeId) {
         try {
@@ -239,12 +223,10 @@ export default function GameSession({
           const character = Array.isArray(chars)
             ? chars.find((c: any) => c._id === activeId)
             : null;
-
           if (character?.stats) {
             const rb = getRaceBonus(character.race ?? "");
             const s = character.stats;
             const dexTotal = (s.dexterite ?? 10) + (rb.dexterite ?? 0);
-
             newPlayer = {
               id: email,
               email,
@@ -295,8 +277,6 @@ export default function GameSession({
     registerPlayer();
   }, [code, isDM, authSession, gameState.campaign, gameState.players]);
 
-  // ── syncToServer ──────────────────────────────────────────────────────────
-
   const syncToServer = useCallback(
     async (fields: SessionSyncFields) => {
       try {
@@ -312,8 +292,6 @@ export default function GameSession({
     [code],
   );
 
-  // ── Action 1 : Changer d'acte ─────────────────────────────────────────────
-
   const changeAct = (actIdx: number) => {
     const update: SessionSyncFields = {
       currentAct: actIdx,
@@ -325,8 +303,6 @@ export default function GameSession({
     syncToServer(update);
   };
 
-  // ── Action 1 suite : Changer de sous-acte ────────────────────────────────
-
   const changeSubAct = (subIdx: number) => {
     const update: SessionSyncFields = {
       currentSubAct: subIdx,
@@ -336,8 +312,6 @@ export default function GameSession({
     setGameState((prev) => ({ ...prev, ...update }));
     syncToServer(update);
   };
-
-  // ── Action 2 : Modifier PV ────────────────────────────────────────────────
 
   const updatePlayerHp = (playerId: string, delta: number) => {
     const updatedPlayers = gameState.players.map((p) =>
@@ -360,10 +334,7 @@ export default function GameSession({
     syncToServer({ players: updatedPlayers });
   };
 
-  // ── Action 2b : Modifier PV monstre ──────────────────────────────────────
-
   const updateMonsterHp = (idx: number, delta: number) => {
-    // Initialise maxHp pour tous les monstres au premier appel
     const updated = activeMonsters.map((m, i) => {
       const maxHp = m.maxHp ?? m.hp ?? 10;
       if (i !== idx) return { ...m, maxHp };
@@ -374,14 +345,10 @@ export default function GameSession({
     syncToServer({ monsters: updated });
   };
 
-  // ── Action 3 : Déplacer tokens ────────────────────────────────────────────
-
   const handleMonstersUpdate = (monsters: Monster[]) => {
     setGameState((prev) => ({ ...prev, monsters }));
     syncToServer({ monsters });
   };
-
-  // ── Action 4 : Brouillard de guerre ───────────────────────────────────────
 
   const toggleFogCell = (col: number, row: number) => {
     const key = `${col},${row}`;
@@ -407,8 +374,7 @@ export default function GameSession({
     toggleFogCell(col, row);
   };
 
-  // ── Action 4b : Tout révéler / Tout cacher ────────────────────────────────
-
+  // ── FIX 1 : boutons toujours disponibles si map présente ─────────────────
   const revealAllCells = () => {
     if (!currentScene) return;
     const gs = currentScene.gridSize ?? 50;
@@ -431,8 +397,6 @@ export default function GameSession({
     syncToServer({ fogRevealedCells: [] });
   };
 
-  // ── Dessin du brouillard ──────────────────────────────────────────────────
-
   useEffect(() => {
     const canvas = fogCanvasRef.current;
     const wrapper = fogWrapperRef.current;
@@ -451,18 +415,15 @@ export default function GameSession({
     const cols = Math.ceil(canvas.width / gs) + 1;
     const rows = Math.ceil(canvas.height / gs) + 1;
 
-    // Cases révélées = MJ manuel + vision joueurs
     const manualRevealed = new Set(gameState.fogRevealedCells);
-    const playerVision = currentScene?.hasFog
-      ? getPlayerVisionCells(gameState.players, gs, ox, oy)
-      : new Set<string>();
+    // ── FIX 2 : vision joueur toujours calculée ───────────────────────────
+    const playerVision = getPlayerVisionCells(gameState.players, gs, ox, oy);
 
     const isVisible = (col: number, row: number) => {
       const key = `${col},${row}`;
       return manualRevealed.has(key) || playerVision.has(key);
     };
 
-    // Couleur du brouillard selon le rôle
     ctx.fillStyle = isDM ? "rgba(0,0,0,0.35)" : "rgba(0,0,0,0.9)";
 
     for (let r = 0; r < rows; r++) {
@@ -473,7 +434,6 @@ export default function GameSession({
       }
     }
 
-    // Grille de guidage en mode édition MJ
     if (isDM && fogEditMode) {
       ctx.strokeStyle = "rgba(245,158,11,0.25)";
       ctx.lineWidth = 1;
@@ -483,18 +443,20 @@ export default function GameSession({
         }
       }
     }
-  }, [gameState.fogRevealedCells, gameState.players, currentScene, fogEditMode, isDM]);
-
-  // ── Action 5 : Dés ───────────────────────────────────────────────────────
+  }, [
+    gameState.fogRevealedCells,
+    gameState.players,
+    currentScene,
+    fogEditMode,
+    isDM,
+  ]);
 
   const rollDice = (d: number, secret: boolean) => {
     const r = Math.floor(Math.random() * d) + 1;
     const entry = secret ? `[SECRET] D${d} : ${r}` : `D${d} : ${r}`;
     if (secret) {
-      // Local uniquement, pas syncé
       setGameState((prev) => ({ ...prev, log: [entry, ...prev.log] }));
     } else {
-      // Envoyé dans le log partagé
       setGameState((prev) => {
         const newLog = [entry, ...prev.log];
         syncToServer({ log: newLog });
@@ -503,17 +465,13 @@ export default function GameSession({
     }
   };
 
-  // Tokens : priorité aux positions live, fallback sur défauts campagne
   const activeMonsters =
     gameState.monsters.length > 0
       ? gameState.monsters
       : (currentScene?.monsters ?? []);
 
-  // ── Rendu ─────────────────────────────────────────────────────────────────
-
   return (
     <div className="min-h-screen bg-slate-950 text-white flex flex-col overflow-hidden">
-      {/* ── HEADER ─────────────────────────────────────────────────────────── */}
       <header className="h-16 border-b border-white/10 bg-slate-900/90 flex items-center px-6 gap-8 z-50">
         <div className="bg-amber-500 text-slate-950 px-4 py-1 rounded-full text-[10px] font-black uppercase">
           SESSION: {code}
@@ -549,7 +507,8 @@ export default function GameSession({
             >
               {fogEditMode ? "Brouillard ON" : "Brouillard"}
             </button>
-            {currentScene?.hasFog && (
+            {/* FIX 1 : visible dès qu'il y a une map */}
+            {currentScene?.mapUrl && (
               <>
                 <button
                   onClick={revealAllCells}
@@ -570,9 +529,7 @@ export default function GameSession({
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* ── ASIDE GAUCHE ───────────────────────────────────────────────── */}
         <aside className="w-80 border-r border-white/5 bg-slate-900/50 flex flex-col p-6 overflow-y-auto">
-          {/* ── VUE MJ ──────────────────────────────────────────────────── */}
           {isDM && (
             <section className="mb-10">
               <h3 className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-6">
@@ -668,7 +625,6 @@ export default function GameSession({
             </section>
           )}
 
-          {/* ── VUE JOUEUR ──────────────────────────────────────────────── */}
           {!isDM &&
             (() => {
               const me = gameState.players.find(
@@ -824,7 +780,6 @@ export default function GameSession({
           )}
         </aside>
 
-        {/* ── CENTRE : MAP ────────────────────────────────────────────────── */}
         <section className="flex-1 bg-black relative flex items-center justify-center p-10 overflow-auto scrollbar-hide">
           {currentScene?.mapUrl ? (
             <div ref={fogWrapperRef} className="relative inline-block">
@@ -846,7 +801,7 @@ export default function GameSession({
                     const [x, y] = cell.split(",").map(Number);
                     return { x, y };
                   });
-                  if (!currentScene?.hasFog) return manual;
+                  // FIX 2 : vision joueur toujours calculée
                   const vision = getPlayerVisionCells(
                     gameState.players,
                     currentScene.gridSize ?? 50,
@@ -891,7 +846,6 @@ export default function GameSession({
           )}
         </section>
 
-        {/* ── ASIDE DROITE : LOG & DÉS ───────────────────────────────────── */}
         <aside className="w-72 border-l border-white/5 bg-slate-900/50 flex flex-col">
           <div className="flex-1 p-6 overflow-y-auto space-y-3">
             <h3 className="text-[9px] font-black text-slate-600 uppercase tracking-widest mb-4">
@@ -911,7 +865,6 @@ export default function GameSession({
             ))}
           </div>
 
-          {/* Dés partagés */}
           <div className="p-4 bg-slate-950 border-t border-white/5">
             <p className="text-[9px] font-black text-slate-600 uppercase tracking-widest mb-3">
               {isDM ? "Dés publics" : "Dés partagés"}
@@ -929,7 +882,6 @@ export default function GameSession({
             </div>
           </div>
 
-          {/* Dés secrets MJ */}
           {isDM && (
             <div className="p-4 bg-slate-950 border-t border-amber-500/10">
               <p className="text-[9px] font-black text-amber-500/50 uppercase tracking-widest mb-3">
@@ -951,7 +903,6 @@ export default function GameSession({
         </aside>
       </div>
 
-      {/* ── MINI FICHE JOUEUR (portail fixe, hors aside) ────────────────── */}
       {hoveredPlayerId !== null &&
         hoverPos !== null &&
         (() => {
@@ -976,7 +927,6 @@ export default function GameSession({
               }}
               className="w-64 bg-slate-900 border border-amber-500/30 p-4 rounded-2xl shadow-2xl"
             >
-              {/* Header */}
               <div className="flex justify-between items-center mb-3">
                 <div>
                   <p className="font-bold text-white text-sm">{p.name}</p>
@@ -991,8 +941,6 @@ export default function GameSession({
                   <p className="text-[9px] text-slate-500">CA {p.ac}</p>
                 </div>
               </div>
-
-              {/* Barre PV */}
               <div className="h-1.5 bg-slate-800 rounded-full mb-4 overflow-hidden">
                 <div
                   className={`h-full rounded-full ${
@@ -1005,8 +953,6 @@ export default function GameSession({
                   style={{ width: `${(p.hp / p.maxHp) * 100}%` }}
                 />
               </div>
-
-              {/* 6 caractéristiques */}
               <div className="grid grid-cols-3 gap-2 mb-4">
                 {[
                   { label: "FOR", val: p.str },
@@ -1035,8 +981,6 @@ export default function GameSession({
                   );
                 })}
               </div>
-
-              {/* Bouton fiche complète */}
               <button
                 onClick={() => {
                   setSelectedCharacter({
@@ -1065,7 +1009,6 @@ export default function GameSession({
           );
         })()}
 
-      {/* ── FICHE COMPLÈTE (CharacterSheet modal) ──────────────────────── */}
       {selectedCharacter && (
         <CharacterSheet
           character={selectedCharacter}
