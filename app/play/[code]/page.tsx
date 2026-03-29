@@ -76,6 +76,28 @@ interface SessionSyncFields {
   log?: string[];
 }
 
+// ─── Utilitaires ──────────────────────────────────────────────────────────────
+
+const getPlayerVisionCells = (
+  players: Player[],
+  gridSize: number,
+  offsetX: number,
+  offsetY: number,
+): Set<string> => {
+  const cells = new Set<string>();
+  players.forEach((p) => {
+    if (p.x === 0 && p.y === 0) return; // pas encore placé
+    const col = Math.floor((p.x + gridSize * 0.35 - offsetX) / gridSize);
+    const row = Math.floor((p.y + gridSize * 0.35 - offsetY) / gridSize);
+    for (let dc = -1; dc <= 1; dc++) {
+      for (let dr = -1; dr <= 1; dr++) {
+        cells.add(`${col + dc},${row + dr}`);
+      }
+    }
+  });
+  return cells;
+};
+
 // ─── Composant ────────────────────────────────────────────────────────────────
 
 export default function GameSession({
@@ -102,7 +124,10 @@ export default function GameSession({
   const [dmHpInputs, setDmHpInputs] = useState<Record<string, string>>({});
   const [fogEditMode, setFogEditMode] = useState(false);
   const [hoveredPlayerId, setHoveredPlayerId] = useState<string | null>(null);
-  const [hoverPos, setHoverPos] = useState<{ top: number; left: number } | null>(null);
+  const [hoverPos, setHoverPos] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [selectedCharacter, setSelectedCharacter] = useState<any | null>(null);
   const fogCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -171,7 +196,10 @@ export default function GameSession({
     return () => clearInterval(poll);
   }, [code, isDM]);
 
-  const buildFallbackPlayer = (email: string, name?: string | null): Player => ({
+  const buildFallbackPlayer = (
+    email: string,
+    name?: string | null,
+  ): Player => ({
     id: email,
     email,
     name: name ?? "Aventurier",
@@ -203,10 +231,14 @@ export default function GameSession({
       const activeId = localStorage.getItem("dnd_vault_active_character");
       if (activeId) {
         try {
-          const charRes = await fetch(`/api/characters?email=${encodeURIComponent(email)}`);
+          const charRes = await fetch(
+            `/api/characters?email=${encodeURIComponent(email)}`,
+          );
           const chars = await charRes.json();
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const character = Array.isArray(chars) ? chars.find((c: any) => c._id === activeId) : null;
+          const character = Array.isArray(chars)
+            ? chars.find((c: any) => c._id === activeId)
+            : null;
 
           if (character?.stats) {
             const rb = getRaceBonus(character.race ?? "");
@@ -250,7 +282,10 @@ export default function GameSession({
         });
         if (res.ok) {
           hasRegistered.current = true;
-          setGameState((prev) => ({ ...prev, players: [...prev.players, newPlayer] }));
+          setGameState((prev) => ({
+            ...prev,
+            players: [...prev.players, newPlayer],
+          }));
         }
       } catch (e) {
         console.error("Erreur inscription joueur:", e);
@@ -274,7 +309,7 @@ export default function GameSession({
         console.error("Erreur sync:", e);
       }
     },
-    [code]
+    [code],
   );
 
   // ── Action 1 : Changer d'acte ─────────────────────────────────────────────
@@ -308,7 +343,7 @@ export default function GameSession({
     const updatedPlayers = gameState.players.map((p) =>
       p.id === playerId
         ? { ...p, hp: Math.max(0, Math.min(p.maxHp, p.hp + delta)) }
-        : p
+        : p,
     );
     setGameState((prev) => ({ ...prev, players: updatedPlayers }));
     syncToServer({ players: updatedPlayers });
@@ -318,7 +353,7 @@ export default function GameSession({
     const val = parseInt(dmHpInputs[playerId] ?? "0", 10);
     if (isNaN(val) || val === 0) return;
     const updatedPlayers = gameState.players.map((p) =>
-      p.id === playerId ? { ...p, hp: Math.max(0, p.hp - val) } : p
+      p.id === playerId ? { ...p, hp: Math.max(0, p.hp - val) } : p,
     );
     setGameState((prev) => ({ ...prev, players: updatedPlayers }));
     setDmHpInputs((prev) => ({ ...prev, [playerId]: "" }));
@@ -392,12 +427,23 @@ export default function GameSession({
     const cols = Math.ceil(canvas.width / gs) + 1;
     const rows = Math.ceil(canvas.height / gs) + 1;
 
+    // Cases révélées = MJ manuel + vision joueurs
+    const manualRevealed = new Set(gameState.fogRevealedCells);
+    const playerVision = currentScene?.hasFog
+      ? getPlayerVisionCells(gameState.players, gs, ox, oy)
+      : new Set<string>();
+
+    const isVisible = (col: number, row: number) => {
+      const key = `${col},${row}`;
+      return manualRevealed.has(key) || playerVision.has(key);
+    };
+
     // Couleur du brouillard selon le rôle
     ctx.fillStyle = isDM ? "rgba(0,0,0,0.35)" : "rgba(0,0,0,0.9)";
 
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
-        if (!gameState.fogRevealedCells.includes(`${c},${r}`)) {
+        if (!isVisible(c, r)) {
           ctx.fillRect(c * gs + ox, r * gs + oy, gs, gs);
         }
       }
@@ -413,7 +459,7 @@ export default function GameSession({
         }
       }
     }
-  }, [gameState.fogRevealedCells, currentScene, fogEditMode, isDM]);
+  }, [gameState.fogRevealedCells, gameState.players, currentScene, fogEditMode, isDM]);
 
   // ── Action 5 : Dés ───────────────────────────────────────────────────────
 
@@ -437,13 +483,12 @@ export default function GameSession({
   const activeMonsters =
     gameState.monsters.length > 0
       ? gameState.monsters
-      : currentScene?.monsters ?? [];
+      : (currentScene?.monsters ?? []);
 
   // ── Rendu ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen bg-slate-950 text-white flex flex-col overflow-hidden">
-
       {/* ── HEADER ─────────────────────────────────────────────────────────── */}
       <header className="h-16 border-b border-white/10 bg-slate-900/90 flex items-center px-6 gap-8 z-50">
         <div className="bg-amber-500 text-slate-950 px-4 py-1 rounded-full text-[10px] font-black uppercase">
@@ -483,122 +528,179 @@ export default function GameSession({
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-
         {/* ── ASIDE GAUCHE ───────────────────────────────────────────────── */}
         <aside className="w-80 border-r border-white/5 bg-slate-900/50 flex flex-col p-6 overflow-y-auto">
-
           {/* ── VUE MJ ──────────────────────────────────────────────────── */}
           {isDM && (
-          <section className="mb-10">
-            <h3 className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-6">
-              Aventuriers Connectés
-            </h3>
-            <div className="space-y-4">
-              {gameState.players.map((p) => (
-                <div
-                  key={p.id}
-                  onMouseEnter={(e) => {
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    setHoverPos({ top: rect.top, left: rect.right + 16 });
-                    if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
-                    setHoveredPlayerId(p.id);
-                  }}
-                  onMouseLeave={() => {
-                    hoverTimeout.current = setTimeout(() => setHoveredPlayerId(null), 300);
-                  }}
-                  className="bg-slate-950 p-4 rounded-2xl border border-white/5 hover:border-amber-500 transition-all"
-                >
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <p className="font-bold text-sm text-white">{p.name}</p>
-                      <p className="text-[9px] text-slate-500 uppercase font-black">{p.class}</p>
+            <section className="mb-10">
+              <h3 className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-6">
+                Aventuriers Connectés
+              </h3>
+              <div className="space-y-4">
+                {gameState.players.map((p) => (
+                  <div
+                    key={p.id}
+                    onMouseEnter={(e) => {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      setHoverPos({ top: rect.top, left: rect.right + 16 });
+                      if (hoverTimeout.current)
+                        clearTimeout(hoverTimeout.current);
+                      setHoveredPlayerId(p.id);
+                    }}
+                    onMouseLeave={() => {
+                      hoverTimeout.current = setTimeout(
+                        () => setHoveredPlayerId(null),
+                        300,
+                      );
+                    }}
+                    className="bg-slate-950 p-4 rounded-2xl border border-white/5 hover:border-amber-500 transition-all"
+                  >
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <p className="font-bold text-sm text-white">{p.name}</p>
+                        <p className="text-[9px] text-slate-500 uppercase font-black">
+                          {p.class}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs font-black text-amber-500">
+                          {p.hp}/{p.maxHp} PV
+                        </p>
+                        <p className="text-[8px] text-slate-600 font-black">
+                          CA {p.ac}
+                        </p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-xs font-black text-amber-500">{p.hp}/{p.maxHp} PV</p>
-                      <p className="text-[8px] text-slate-600 font-black">CA {p.ac}</p>
-                    </div>
-                  </div>
-                  <div className="mt-2 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all ${
-                        p.maxHp > 0 && p.hp / p.maxHp < 0.25 ? "bg-red-500"
-                        : p.maxHp > 0 && p.hp / p.maxHp < 0.5 ? "bg-yellow-500"
-                        : "bg-green-500"
-                      }`}
-                      style={{ width: `${p.maxHp > 0 ? Math.max(0, (p.hp / p.maxHp) * 100) : 0}%` }}
-                    />
-                  </div>
-                  <div className="mt-3 flex items-center gap-2">
-                    <button onClick={() => updatePlayerHp(p.id, -1)} className="w-7 h-7 rounded-lg bg-red-500/10 text-red-400 text-xs font-black hover:bg-red-500/30 transition-all">−</button>
-                    <input
-                      type="number"
-                      placeholder="Dégâts"
-                      value={dmHpInputs[p.id] ?? ""}
-                      onChange={(e) => setDmHpInputs((prev) => ({ ...prev, [p.id]: e.target.value }))}
-                      onKeyDown={(e) => { if (e.key === "Enter") applyDamageInput(p.id); }}
-                      className="flex-1 bg-slate-900 border border-white/10 rounded-lg px-2 py-1 text-[10px] text-white text-center focus:outline-none focus:border-amber-500"
-                    />
-                    <button onClick={() => applyDamageInput(p.id)} className="text-[8px] font-black text-amber-500 uppercase px-2 py-1 bg-amber-500/10 rounded-lg hover:bg-amber-500/30 transition-all">OK</button>
-                    <button onClick={() => updatePlayerHp(p.id, 1)} className="w-7 h-7 rounded-lg bg-green-500/10 text-green-400 text-xs font-black hover:bg-green-500/30 transition-all">+</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-          )}
-
-          {/* ── VUE JOUEUR ──────────────────────────────────────────────── */}
-          {!isDM && (() => {
-            const me = gameState.players.find((p) => p.email === authSession?.user?.email);
-            return (
-              <>
-                {me && (
-                  <div className="mb-6 bg-slate-950 border border-blue-500/30 p-4 rounded-2xl">
-                    <p className="text-[10px] font-black text-blue-400 uppercase mb-2">Mon Personnage</p>
-                    <p className="font-bold text-white">{me.name}</p>
-                    <p className="text-[9px] text-slate-500 uppercase">{me.class}</p>
                     <div className="mt-2 h-1.5 bg-slate-800 rounded-full overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all ${
-                          me.maxHp > 0 && me.hp / me.maxHp < 0.25 ? "bg-red-500"
-                          : me.maxHp > 0 && me.hp / me.maxHp < 0.5 ? "bg-yellow-500"
-                          : "bg-green-500"
+                          p.maxHp > 0 && p.hp / p.maxHp < 0.25
+                            ? "bg-red-500"
+                            : p.maxHp > 0 && p.hp / p.maxHp < 0.5
+                              ? "bg-yellow-500"
+                              : "bg-green-500"
                         }`}
-                        style={{ width: `${me.maxHp > 0 ? Math.max(0, (me.hp / me.maxHp) * 100) : 0}%` }}
+                        style={{
+                          width: `${p.maxHp > 0 ? Math.max(0, (p.hp / p.maxHp) * 100) : 0}%`,
+                        }}
                       />
                     </div>
-                    <p className="text-xs text-amber-500 font-black mt-1">{me.hp}/{me.maxHp} PV — CA {me.ac}</p>
+                    <div className="mt-3 flex items-center gap-2">
+                      <button
+                        onClick={() => updatePlayerHp(p.id, -1)}
+                        className="w-7 h-7 rounded-lg bg-red-500/10 text-red-400 text-xs font-black hover:bg-red-500/30 transition-all"
+                      >
+                        −
+                      </button>
+                      <input
+                        type="number"
+                        placeholder="Dégâts"
+                        value={dmHpInputs[p.id] ?? ""}
+                        onChange={(e) =>
+                          setDmHpInputs((prev) => ({
+                            ...prev,
+                            [p.id]: e.target.value,
+                          }))
+                        }
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") applyDamageInput(p.id);
+                        }}
+                        className="flex-1 bg-slate-900 border border-white/10 rounded-lg px-2 py-1 text-[10px] text-white text-center focus:outline-none focus:border-amber-500"
+                      />
+                      <button
+                        onClick={() => applyDamageInput(p.id)}
+                        className="text-[8px] font-black text-amber-500 uppercase px-2 py-1 bg-amber-500/10 rounded-lg hover:bg-amber-500/30 transition-all"
+                      >
+                        OK
+                      </button>
+                      <button
+                        onClick={() => updatePlayerHp(p.id, 1)}
+                        className="w-7 h-7 rounded-lg bg-green-500/10 text-green-400 text-xs font-black hover:bg-green-500/30 transition-all"
+                      >
+                        +
+                      </button>
+                    </div>
                   </div>
-                )}
-                <h3 className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-4">
-                  Aventuriers Connectés
-                </h3>
-                <div className="space-y-3">
-                  {gameState.players
-                    .filter((p) => p.email !== authSession?.user?.email)
-                    .map((p) => (
-                      <div key={p.id} className="bg-slate-950 p-3 rounded-xl border border-white/5">
-                        <div className="flex justify-between">
-                          <span className="text-sm font-bold text-white">{p.name}</span>
-                          <span className="text-xs text-amber-500 font-black">{p.hp}/{p.maxHp} PV</span>
-                        </div>
-                        <div className="mt-1.5 h-1 bg-slate-800 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all ${
-                              p.maxHp > 0 && p.hp / p.maxHp < 0.25 ? "bg-red-500"
-                              : p.maxHp > 0 && p.hp / p.maxHp < 0.5 ? "bg-yellow-500"
-                              : "bg-green-500"
-                            }`}
-                            style={{ width: `${p.maxHp > 0 ? Math.max(0, (p.hp / p.maxHp) * 100) : 0}%` }}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                </div>
-              </>
-            );
-          })()}
+                ))}
+              </div>
+            </section>
+          )}
 
+          {/* ── VUE JOUEUR ──────────────────────────────────────────────── */}
+          {!isDM &&
+            (() => {
+              const me = gameState.players.find(
+                (p) => p.email === authSession?.user?.email,
+              );
+              return (
+                <>
+                  {me && (
+                    <div className="mb-6 bg-slate-950 border border-blue-500/30 p-4 rounded-2xl">
+                      <p className="text-[10px] font-black text-blue-400 uppercase mb-2">
+                        Mon Personnage
+                      </p>
+                      <p className="font-bold text-white">{me.name}</p>
+                      <p className="text-[9px] text-slate-500 uppercase">
+                        {me.class}
+                      </p>
+                      <div className="mt-2 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${
+                            me.maxHp > 0 && me.hp / me.maxHp < 0.25
+                              ? "bg-red-500"
+                              : me.maxHp > 0 && me.hp / me.maxHp < 0.5
+                                ? "bg-yellow-500"
+                                : "bg-green-500"
+                          }`}
+                          style={{
+                            width: `${me.maxHp > 0 ? Math.max(0, (me.hp / me.maxHp) * 100) : 0}%`,
+                          }}
+                        />
+                      </div>
+                      <p className="text-xs text-amber-500 font-black mt-1">
+                        {me.hp}/{me.maxHp} PV — CA {me.ac}
+                      </p>
+                    </div>
+                  )}
+                  <h3 className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-4">
+                    Aventuriers Connectés
+                  </h3>
+                  <div className="space-y-3">
+                    {gameState.players
+                      .filter((p) => p.email !== authSession?.user?.email)
+                      .map((p) => (
+                        <div
+                          key={p.id}
+                          className="bg-slate-950 p-3 rounded-xl border border-white/5"
+                        >
+                          <div className="flex justify-between">
+                            <span className="text-sm font-bold text-white">
+                              {p.name}
+                            </span>
+                            <span className="text-xs text-amber-500 font-black">
+                              {p.hp}/{p.maxHp} PV
+                            </span>
+                          </div>
+                          <div className="mt-1.5 h-1 bg-slate-800 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${
+                                p.maxHp > 0 && p.hp / p.maxHp < 0.25
+                                  ? "bg-red-500"
+                                  : p.maxHp > 0 && p.hp / p.maxHp < 0.5
+                                    ? "bg-yellow-500"
+                                    : "bg-green-500"
+                              }`}
+                              style={{
+                                width: `${p.maxHp > 0 ? Math.max(0, (p.hp / p.maxHp) * 100) : 0}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                </>
+              );
+            })()}
 
           {isDM && gameState.campaign && (
             <section className="flex-1">
@@ -626,7 +728,7 @@ export default function GameSession({
                       />
                       {sub.title}
                     </button>
-                  )
+                  ),
                 )}
               </div>
             </section>
@@ -639,9 +741,14 @@ export default function GameSession({
               </h3>
               <div className="space-y-2">
                 {activeMonsters.map((m, idx) => (
-                  <div key={idx} className="bg-slate-950 p-3 rounded-xl border border-white/5">
+                  <div
+                    key={idx}
+                    className="bg-slate-950 p-3 rounded-xl border border-white/5"
+                  >
                     <div className="flex justify-between items-center mb-2">
-                      <span className="text-xs font-bold text-white">{m.name}</span>
+                      <span className="text-xs font-bold text-white">
+                        {m.name}
+                      </span>
                       <span className="text-xs text-amber-500 font-black">
                         {m.hp ?? "?"} PV
                       </span>
@@ -682,24 +789,44 @@ export default function GameSession({
               <BattleGrid
                 mapUrl={currentScene.mapUrl}
                 gridSize={currentScene.gridSize ?? 50}
-                gridType={(currentScene.gridType as "square" | "hex" | "none") ?? "square"}
+                gridType={
+                  (currentScene.gridType as "square" | "hex" | "none") ??
+                  "square"
+                }
                 offsetX={currentScene.offsetX ?? 0}
                 offsetY={currentScene.offsetY ?? 0}
                 opacity={currentScene.opacity ?? 0.3}
-                hasFog={gameState.fogRevealedCells.length > 0 || (currentScene.hasFog ?? false)}
+                hasFog={currentScene.hasFog ?? false}
                 monsters={activeMonsters}
                 onUpdateMonsters={isDM ? handleMonstersUpdate : undefined}
-                fogRevealedCells={gameState.fogRevealedCells.map((cell) => {
-                  const [x, y] = cell.split(",").map(Number);
-                  return { x, y };
-                })}
+                fogRevealedCells={(() => {
+                  const manual = gameState.fogRevealedCells.map((cell) => {
+                    const [x, y] = cell.split(",").map(Number);
+                    return { x, y };
+                  });
+                  if (!currentScene?.hasFog) return manual;
+                  const vision = getPlayerVisionCells(
+                    gameState.players,
+                    currentScene.gridSize ?? 50,
+                    currentScene.offsetX ?? 0,
+                    currentScene.offsetY ?? 0,
+                  );
+                  const visionArr = [...vision].map((key) => {
+                    const [x, y] = key.split(",").map(Number);
+                    return { x, y };
+                  });
+                  return [...manual, ...visionArr];
+                })()}
                 playerTokens={gameState.players}
                 onUpdatePlayerTokens={(updatedTokens) => {
                   const updatedPlayers = gameState.players.map((p) => {
                     const token = updatedTokens.find((t) => t.id === p.id);
                     return token ? { ...p, x: token.x, y: token.y } : p;
                   });
-                  setGameState((prev) => ({ ...prev, players: updatedPlayers }));
+                  setGameState((prev) => ({
+                    ...prev,
+                    players: updatedPlayers,
+                  }));
                   syncToServer({ players: updatedPlayers });
                 }}
                 isDM={isDM}
@@ -779,99 +906,121 @@ export default function GameSession({
             </div>
           )}
         </aside>
-
       </div>
 
       {/* ── MINI FICHE JOUEUR (portail fixe, hors aside) ────────────────── */}
-      {hoveredPlayerId !== null && hoverPos !== null && (() => {
-        const p = gameState.players.find((pl) => pl.id === hoveredPlayerId);
-        if (!p) return null;
-        return (
-          <div
-            onMouseEnter={() => { if (hoverTimeout.current) clearTimeout(hoverTimeout.current); }}
-            onMouseLeave={() => { hoverTimeout.current = setTimeout(() => setHoveredPlayerId(null), 300); }}
-            style={{ position: "fixed", top: hoverPos.top, left: hoverPos.left, zIndex: 9999 }}
-            className="w-64 bg-slate-900 border border-amber-500/30 p-4 rounded-2xl shadow-2xl"
-          >
-            {/* Header */}
-            <div className="flex justify-between items-center mb-3">
-              <div>
-                <p className="font-bold text-white text-sm">{p.name}</p>
-                <p className="text-[9px] text-slate-400 uppercase">
-                  Niveau {p.level ?? 1} {p.class}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-xs font-black text-amber-500">
-                  {p.hp}/{p.maxHp} PV
-                </p>
-                <p className="text-[9px] text-slate-500">CA {p.ac}</p>
-              </div>
-            </div>
-
-            {/* Barre PV */}
-            <div className="h-1.5 bg-slate-800 rounded-full mb-4 overflow-hidden">
-              <div
-                className={`h-full rounded-full ${
-                  p.hp / p.maxHp < 0.25 ? "bg-red-500"
-                  : p.hp / p.maxHp < 0.5 ? "bg-yellow-500"
-                  : "bg-green-500"
-                }`}
-                style={{ width: `${(p.hp / p.maxHp) * 100}%` }}
-              />
-            </div>
-
-            {/* 6 caractéristiques */}
-            <div className="grid grid-cols-3 gap-2 mb-4">
-              {[
-                { label: "FOR", val: p.str },
-                { label: "DEX", val: p.dex },
-                { label: "CON", val: p.con },
-                { label: "INT", val: p.int },
-                { label: "SAG", val: p.wis },
-                { label: "CHA", val: p.cha },
-              ].map(({ label, val }) => {
-                const mod = val ? Math.floor((val - 10) / 2) : null;
-                return (
-                  <div key={label} className="bg-slate-950 p-2 rounded-xl text-center border border-white/5">
-                    <p className="text-[8px] text-slate-500 uppercase font-black">{label}</p>
-                    <p className="text-sm font-black text-white">{val ?? "—"}</p>
-                    <p className="text-[9px] text-amber-500 font-bold">
-                      {mod !== null ? (mod >= 0 ? `+${mod}` : `${mod}`) : ""}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Bouton fiche complète */}
-            <button
-              onClick={() => {
-                setSelectedCharacter({
-                  name: p.name,
-                  level: p.level ?? 1,
-                  race: p.race ?? "",
-                  class: p.class,
-                  stats: {
-                    force: p.str ?? 10,
-                    dexterite: p.dex ?? 10,
-                    constitution: p.con ?? 10,
-                    intelligence: p.int ?? 10,
-                    sagesse: p.wis ?? 10,
-                    charisme: p.cha ?? 10,
-                  },
-                  hpMax: p.maxHp,
-                  speed: 9,
-                });
-                setHoveredPlayerId(null);
+      {hoveredPlayerId !== null &&
+        hoverPos !== null &&
+        (() => {
+          const p = gameState.players.find((pl) => pl.id === hoveredPlayerId);
+          if (!p) return null;
+          return (
+            <div
+              onMouseEnter={() => {
+                if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
               }}
-              className="w-full py-2 bg-amber-500/10 text-amber-500 rounded-xl text-[9px] font-black uppercase hover:bg-amber-500 hover:text-slate-950 transition-all"
+              onMouseLeave={() => {
+                hoverTimeout.current = setTimeout(
+                  () => setHoveredPlayerId(null),
+                  300,
+                );
+              }}
+              style={{
+                position: "fixed",
+                top: hoverPos.top,
+                left: hoverPos.left,
+                zIndex: 9999,
+              }}
+              className="w-64 bg-slate-900 border border-amber-500/30 p-4 rounded-2xl shadow-2xl"
             >
-              Voir fiche complète
-            </button>
-          </div>
-        );
-      })()}
+              {/* Header */}
+              <div className="flex justify-between items-center mb-3">
+                <div>
+                  <p className="font-bold text-white text-sm">{p.name}</p>
+                  <p className="text-[9px] text-slate-400 uppercase">
+                    Niveau {p.level ?? 1} {p.class}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs font-black text-amber-500">
+                    {p.hp}/{p.maxHp} PV
+                  </p>
+                  <p className="text-[9px] text-slate-500">CA {p.ac}</p>
+                </div>
+              </div>
+
+              {/* Barre PV */}
+              <div className="h-1.5 bg-slate-800 rounded-full mb-4 overflow-hidden">
+                <div
+                  className={`h-full rounded-full ${
+                    p.hp / p.maxHp < 0.25
+                      ? "bg-red-500"
+                      : p.hp / p.maxHp < 0.5
+                        ? "bg-yellow-500"
+                        : "bg-green-500"
+                  }`}
+                  style={{ width: `${(p.hp / p.maxHp) * 100}%` }}
+                />
+              </div>
+
+              {/* 6 caractéristiques */}
+              <div className="grid grid-cols-3 gap-2 mb-4">
+                {[
+                  { label: "FOR", val: p.str },
+                  { label: "DEX", val: p.dex },
+                  { label: "CON", val: p.con },
+                  { label: "INT", val: p.int },
+                  { label: "SAG", val: p.wis },
+                  { label: "CHA", val: p.cha },
+                ].map(({ label, val }) => {
+                  const mod = val ? Math.floor((val - 10) / 2) : null;
+                  return (
+                    <div
+                      key={label}
+                      className="bg-slate-950 p-2 rounded-xl text-center border border-white/5"
+                    >
+                      <p className="text-[8px] text-slate-500 uppercase font-black">
+                        {label}
+                      </p>
+                      <p className="text-sm font-black text-white">
+                        {val ?? "—"}
+                      </p>
+                      <p className="text-[9px] text-amber-500 font-bold">
+                        {mod !== null ? (mod >= 0 ? `+${mod}` : `${mod}`) : ""}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Bouton fiche complète */}
+              <button
+                onClick={() => {
+                  setSelectedCharacter({
+                    name: p.name,
+                    level: p.level ?? 1,
+                    race: p.race ?? "",
+                    class: p.class,
+                    stats: {
+                      force: p.str ?? 10,
+                      dexterite: p.dex ?? 10,
+                      constitution: p.con ?? 10,
+                      intelligence: p.int ?? 10,
+                      sagesse: p.wis ?? 10,
+                      charisme: p.cha ?? 10,
+                    },
+                    hpMax: p.maxHp,
+                    speed: 9,
+                  });
+                  setHoveredPlayerId(null);
+                }}
+                className="w-full py-2 bg-amber-500/10 text-amber-500 rounded-xl text-[9px] font-black uppercase hover:bg-amber-500 hover:text-slate-950 transition-all"
+              >
+                Voir fiche complète
+              </button>
+            </div>
+          );
+        })()}
 
       {/* ── FICHE COMPLÈTE (CharacterSheet modal) ──────────────────────── */}
       {selectedCharacter && (
