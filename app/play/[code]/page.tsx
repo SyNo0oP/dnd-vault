@@ -32,6 +32,7 @@ interface Monster {
   y: number;
   hp?: number;
   maxHp?: number;
+  ac?: number;
 }
 
 interface SubAct {
@@ -129,6 +130,14 @@ export default function GameSession({
   const fogCanvasRef = useRef<HTMLCanvasElement>(null);
   const fogWrapperRef = useRef<HTMLDivElement>(null);
   const hoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [hoveredMonster, setHoveredMonster] = useState<Monster | null>(null);
+  const [monsterHoverPos, setMonsterHoverPos] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
+  const monsterHoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   const currentScene =
     gameState.campaign?.acts[gameState.currentAct]?.subActs[
@@ -387,6 +396,16 @@ export default function GameSession({
   const handleMonstersUpdate = (monsters: Monster[]) => {
     setGameState((prev) => ({ ...prev, monsters }));
     syncToServer({ monsters });
+  };
+
+  const handleMonsterHover = (monster: Monster | null, rect: DOMRect | null) => {
+    if (monsterHoverTimeout.current) clearTimeout(monsterHoverTimeout.current);
+    if (monster && rect) {
+      setMonsterHoverPos({ top: rect.top, left: rect.right + 12 });
+      setHoveredMonster(monster);
+    } else {
+      monsterHoverTimeout.current = setTimeout(() => setHoveredMonster(null), 300);
+    }
   };
 
   const toggleFogCell = (col: number, row: number) => {
@@ -865,6 +884,7 @@ export default function GameSession({
                   syncToServer({ players: updatedPlayers });
                 }}
                 isDM={isDM}
+                onMonsterHover={handleMonsterHover}
               />
               <canvas
                 ref={fogCanvasRef}
@@ -1065,6 +1085,72 @@ export default function GameSession({
           onClose={() => setSelectedCharacter(null)}
         />
       )}
+
+      {hoveredMonster !== null && monsterHoverPos !== null && (() => {
+        const m = hoveredMonster;
+        const maxHp = m.maxHp ?? m.hp ?? 10;
+        const hp = m.hp ?? maxHp;
+        const hpRatio = maxHp > 0 ? hp / maxHp : 0;
+        const monsterIdx = activeMonsters.findIndex((am) => am === m);
+        return (
+          <div
+            onMouseEnter={() => {
+              if (monsterHoverTimeout.current) clearTimeout(monsterHoverTimeout.current);
+            }}
+            onMouseLeave={() => {
+              monsterHoverTimeout.current = setTimeout(() => setHoveredMonster(null), 300);
+            }}
+            style={{
+              position: "fixed",
+              top: monsterHoverPos.top,
+              left: monsterHoverPos.left,
+              zIndex: 9999,
+            }}
+            className="w-56 bg-slate-900 border border-amber-500/30 p-4 rounded-2xl shadow-2xl"
+          >
+            <div className="flex justify-between items-center mb-2">
+              <p className="font-bold text-white text-sm">{m.name}</p>
+              {m.ac != null && (
+                <p className="text-[9px] text-slate-500 font-black">CA {m.ac}</p>
+              )}
+            </div>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xs font-black text-amber-500">
+                {hp}/{maxHp} PV
+              </span>
+            </div>
+            <div className="h-1.5 bg-slate-800 rounded-full mb-3 overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${
+                  hpRatio < 0.25
+                    ? "bg-red-500"
+                    : hpRatio < 0.5
+                      ? "bg-yellow-500"
+                      : "bg-green-500"
+                }`}
+                style={{ width: `${hpRatio * 100}%` }}
+              />
+            </div>
+            {isDM && monsterIdx >= 0 && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => updateMonsterHp(monsterIdx, -1)}
+                  className="w-7 h-7 rounded-lg bg-red-500/10 text-red-400 text-xs font-black hover:bg-red-500/30 transition-all"
+                >
+                  −
+                </button>
+                <div className="flex-1" />
+                <button
+                  onClick={() => updateMonsterHp(monsterIdx, 1)}
+                  className="w-7 h-7 rounded-lg bg-green-500/10 text-green-400 text-xs font-black hover:bg-green-500/30 transition-all"
+                >
+                  +
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }

@@ -5,6 +5,9 @@ interface Monster {
   name: string;
   x: number;
   y: number;
+  hp?: number;
+  maxHp?: number;
+  ac?: number;
 }
 
 interface PlayerToken {
@@ -28,6 +31,7 @@ interface GridProps {
   onUpdatePlayerTokens?: (players: PlayerToken[]) => void;
   isDM?: boolean;
   fogRevealedCells?: { x: number; y: number }[];
+  onMonsterHover?: (monster: Monster | null, rect: DOMRect | null) => void;
 }
 
 export default function BattleGrid({
@@ -44,6 +48,7 @@ export default function BattleGrid({
   onUpdatePlayerTokens,
   isDM = false,
   fogRevealedCells = [],
+  onMonsterHover,
 }: GridProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -168,6 +173,8 @@ export default function BattleGrid({
             key={`m-${i}`}
             draggable
             onDragEnd={(e) => handleDragEnd(e, i)}
+            onMouseEnter={(e) => onMonsterHover?.(monster, e.currentTarget.getBoundingClientRect())}
+            onMouseLeave={() => onMonsterHover?.(null, null)}
             className="absolute z-10 cursor-grab active:cursor-grabbing group"
             style={{ left: `${monster.x}px`, top: `${monster.y}px`, width: `${tokenSize}px`, height: `${tokenSize}px`, transition: "left 0.1s, top 0.1s" }}
           >
