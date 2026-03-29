@@ -407,6 +407,30 @@ export default function GameSession({
     toggleFogCell(col, row);
   };
 
+  // ── Action 4b : Tout révéler / Tout cacher ────────────────────────────────
+
+  const revealAllCells = () => {
+    if (!currentScene) return;
+    const gs = currentScene.gridSize ?? 50;
+    const wrapper = fogWrapperRef.current;
+    if (!wrapper) return;
+    const cols = Math.ceil(wrapper.clientWidth / gs) + 1;
+    const rows = Math.ceil(wrapper.clientHeight / gs) + 1;
+    const allCells: string[] = [];
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        allCells.push(`${c},${r}`);
+      }
+    }
+    setGameState((prev) => ({ ...prev, fogRevealedCells: allCells }));
+    syncToServer({ fogRevealedCells: allCells });
+  };
+
+  const hideAllCells = () => {
+    setGameState((prev) => ({ ...prev, fogRevealedCells: [] }));
+    syncToServer({ fogRevealedCells: [] });
+  };
+
   // ── Dessin du brouillard ──────────────────────────────────────────────────
 
   useEffect(() => {
@@ -514,16 +538,34 @@ export default function GameSession({
         )}
 
         {isDM && (
-          <button
-            onClick={() => setFogEditMode((f) => !f)}
-            className={`ml-auto text-[9px] font-black uppercase px-4 py-2 rounded-xl border transition-all ${
-              fogEditMode
-                ? "border-amber-500 text-amber-500 bg-amber-500/10"
-                : "border-white/10 text-slate-500 hover:border-amber-500/50"
-            }`}
-          >
-            {fogEditMode ? "Brouillard ON" : "Brouillard"}
-          </button>
+          <div className="ml-auto flex gap-2">
+            <button
+              onClick={() => setFogEditMode((f) => !f)}
+              className={`text-[9px] font-black uppercase px-4 py-2 rounded-xl border transition-all ${
+                fogEditMode
+                  ? "border-amber-500 text-amber-500 bg-amber-500/10"
+                  : "border-white/10 text-slate-500 hover:border-amber-500/50"
+              }`}
+            >
+              {fogEditMode ? "Brouillard ON" : "Brouillard"}
+            </button>
+            {currentScene?.hasFog && (
+              <>
+                <button
+                  onClick={revealAllCells}
+                  className="text-[9px] font-black uppercase px-3 py-2 rounded-xl border border-green-500/30 text-green-400 hover:bg-green-500/10 transition-all"
+                >
+                  Tout révéler
+                </button>
+                <button
+                  onClick={hideAllCells}
+                  className="text-[9px] font-black uppercase px-3 py-2 rounded-xl border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-all"
+                >
+                  Tout cacher
+                </button>
+              </>
+            )}
+          </div>
         )}
       </header>
 
