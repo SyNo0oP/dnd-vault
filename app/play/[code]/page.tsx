@@ -838,6 +838,7 @@ export default function GameSession({
                 style={{
                   pointerEvents: isDM && fogEditMode ? "auto" : "none",
                   cursor: isDM && fogEditMode ? "crosshair" : "default",
+                  zIndex: isDM ? 5 : 20,
                 }}
               />
             </div>

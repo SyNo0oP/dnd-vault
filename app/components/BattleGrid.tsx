@@ -168,7 +168,7 @@ export default function BattleGrid({
             key={`m-${i}`}
             draggable
             onDragEnd={(e) => handleDragEnd(e, i)}
-            className="absolute z-50 cursor-grab active:cursor-grabbing group"
+            className="absolute z-10 cursor-grab active:cursor-grabbing group"
             style={{ left: `${monster.x}px`, top: `${monster.y}px`, width: `${tokenSize}px`, height: `${tokenSize}px`, transition: "left 0.1s, top 0.1s" }}
           >
             <div className="w-full h-full rounded-full border-2 border-amber-500 bg-slate-800 shadow-xl flex items-center justify-center overflow-hidden transition-transform group-hover:scale-110">
