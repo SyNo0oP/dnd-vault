@@ -730,6 +730,27 @@ export default function GameSession({
                       <p className="text-xs text-amber-500 font-black mt-1">
                         {me.hp}/{me.maxHp} PV — CA {me.ac}
                       </p>
+                      <button
+                        onClick={() => setSelectedCharacter({
+                          name: me.name,
+                          level: me.level ?? 1,
+                          race: me.race ?? "",
+                          class: me.class,
+                          stats: {
+                            force: me.str ?? 10,
+                            dexterite: me.dex ?? 10,
+                            constitution: me.con ?? 10,
+                            intelligence: me.int ?? 10,
+                            sagesse: me.wis ?? 10,
+                            charisme: me.cha ?? 10,
+                          },
+                          hpMax: me.maxHp,
+                          speed: 9,
+                        })}
+                        className="w-full mt-3 py-2 bg-blue-500/10 text-blue-400 rounded-xl text-[9px] font-black uppercase hover:bg-blue-500 hover:text-white transition-all"
+                      >
+                        Voir ma fiche complète
+                      </button>
                     </div>
                   )}
                   <h3 className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-4">
