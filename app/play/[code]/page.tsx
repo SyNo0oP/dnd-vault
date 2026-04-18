@@ -958,7 +958,7 @@ export default function GameSession({
                   syncToServer({ players: updatedPlayers });
                 }}
                 isDM={isDM}
-                onMonsterHover={handleMonsterHover}
+                onMonsterHover={isDM ? handleMonsterHover : undefined}
               />
               <canvas
                 ref={fogCanvasRef}
